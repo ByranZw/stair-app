@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import {
+  instrumentLabel,
+  instrumentUnit,
+  currencyOf,
+  isForeign,
+  quoteCnyValue,
+  priceInCurrency,
+} from '../../domain/currency'
 import AppPicker from '../../components/AppPicker.vue'
 import PageOverlays from '../../components/PageOverlays.vue'
 import { usePageSelection } from '../../composables/useSelection'
@@ -205,8 +213,24 @@ const realizedTotal = computed(() =>
     new D(0),
   ),
 )
-const references = computed(() =>
-  chartMode.value === 'minute' && !marketReference.value
+const references = computed(() => {
+  if (item.value && isForeign(item.value)) {
+    const quote = cached.value?.quote
+    if (!quote) return []
+    return (chartMode.value === 'minute' ? points.value : dailyPoints.value).map((point) => ({
+      date: point.date,
+      cost: position.value ? priceInCurrency(position.value.unitCost, quote) : undefined,
+      buy:
+        reminder.value?.threshold && reminder.value.thresholdLabel !== '回撤止盈价'
+          ? priceInCurrency(reminder.value.threshold, quote)
+          : undefined,
+      sell:
+        reminder.value?.threshold && reminder.value.thresholdLabel === '回撤止盈价'
+          ? priceInCurrency(reminder.value.threshold, quote)
+          : undefined,
+    }))
+  }
+  return chartMode.value === 'minute' && !marketReference.value
     ? []
     : chartReferences(
         bookState.data,
@@ -214,11 +238,11 @@ const references = computed(() =>
         id.value,
         (chartMode.value === 'minute' ? points.value : dailyPoints.value).map((p) => p.date),
         plan.value,
-      ),
-)
+      )
+})
 const marketValue = computed(() =>
-  position.value && cached.value
-    ? new D(position.value.qty).mul(cached.value.quote.value)
+  position.value && cached.value && quoteCnyValue(cached.value.quote)
+    ? new D(position.value.qty).mul(quoteCnyValue(cached.value.quote)!)
     : undefined,
 )
 /** 交易入口固定详情账户，但仍由表单确认实际成交数值。 */
@@ -258,12 +282,13 @@ function editPlan(): void {
     <view class="row"
       ><view
         ><view style="font-size: 19px; font-weight: 700">{{ item.name }}</view
-        ><view class="sub"
-          >{{ item.code }} ·
-          {{ item.type === 'GOLD' ? '积存金' : item.type === 'ETF' ? 'ETF' : '场外基金' }}</view
-        ></view
+        ><view class="sub">{{ item.code }} · {{ instrumentLabel(item) }}</view></view
       ><text class="badge">{{
-        item.type === 'GOLD' ? '元/克 · 卖出价' : item.type === 'ETF' ? '市场价' : '正式单位净值'
+        item.type === 'GOLD'
+          ? '元/克 · 卖出价'
+          : item.type === 'FUND'
+            ? '正式单位净值'
+            : currencyOf(item) + (cached?.quote.delayed ? ' · 延迟' : ' · 市场价')
       }}</text></view
     >
     <view
@@ -277,6 +302,10 @@ function editPlan(): void {
         cached?.quote.date || '等待行情'
       }}</text></view
     >
+    <view v-if="isForeign(item) && cached?.quote.fxRate" class="quote-fx">
+      <text>1 {{ currencyOf(item) }} = ¥{{ formatMoney(cached.quote.fxRate, 4) }}</text>
+      <text>{{ cached.quote.fxDate }}</text>
+    </view>
     <view v-if="watchState.errors[id]" class="error"
       >{{ watchState.errors[id] }}{{ cached ? ' · 当前为缓存数据' : '' }}</view
     >
@@ -308,7 +337,8 @@ function editPlan(): void {
           ></view
         ></view
       ><view v-if="reminder?.threshold && !reminder.actionable" class="plan-next row"
-        ><text class="muted">{{ reminder.thresholdLabel }}</text
+        ><text class="muted"
+          >{{ reminder.thresholdLabel }}{{ isForeign(item) ? '（人民币）' : '' }}</text
         ><text class="num">{{ formatMoney(reminder.threshold, 4) }}</text></view
       ><PlanReminderNotice
         v-if="
@@ -366,7 +396,7 @@ function editPlan(): void {
         >
           {{ option[1] }}
         </button> </view
-      ><view v-if="item.type === 'ETF'" class="chart-tabs">
+      ><view v-if="item.type === 'ETF' || item.type === 'STOCK'" class="chart-tabs">
         <button
           v-for="mode in [
             { key: 'minute', label: '分时' },
@@ -400,7 +430,7 @@ function editPlan(): void {
         :active="chartVisible"
         :points="points"
         :trades="trades"
-        :cost="position?.unitCost"
+        :cost="position ? priceInCurrency(position.unitCost, cached?.quote) : undefined"
         :references="references"
         :candles="['day', 'week', 'month'].includes(chartMode)"
         :minute="chartMode === 'minute'"
@@ -413,7 +443,7 @@ function editPlan(): void {
           >{{
             item.type === 'GOLD'
               ? '上金所 Au99.99 · 元/克'
-              : item.type === 'ETF'
+              : item.type === 'ETF' || item.type === 'STOCK'
                 ? chartMode === 'minute'
                   ? '来源分钟价'
                   : chartMode === 'line'
@@ -421,6 +451,7 @@ function editPlan(): void {
                     : '未复权K线'
                 : '正式单位净值'
           }}
+          {{ isForeign(item) ? ' · ' + currencyOf(item) : '' }}
           {{
             watchState.loading[id + '/minute'] || watchState.loading[id + '/history']
               ? ' · 正在加载'
@@ -435,6 +466,9 @@ function editPlan(): void {
       <view v-if="item.type === 'GOLD' && chartMode === 'minute'" class="gold-coverage">{{
         sgeSessionLabel(chartClock)
       }}</view>
+      <view v-if="isForeign(item)" class="small muted" style="margin-top: 10px"
+        >参考线按当前汇率折算</view
+      >
       <button
         class="text-btn chart-help-toggle"
         :aria-expanded="chartHelp"
@@ -511,10 +545,11 @@ function editPlan(): void {
       >
       <view class="metric-grid"
         ><view
-          ><view class="metric-label">持有{{ item.type === 'GOLD' ? '克重' : '份额' }}</view
+          ><view class="metric-label"
+            >持有{{ item.type === 'GOLD' ? '克重' : item.type === 'STOCK' ? '股数' : '份额' }}</view
           ><view class="metric-value">{{ position?.qty || '0' }}</view></view
         ><view
-          ><view class="metric-label">单位成本</view
+          ><view class="metric-label">单位成本（人民币）</view
           ><view class="metric-value">{{
             position ? formatMoney(position.unitCost, 4) : '—'
           }}</view></view
@@ -563,7 +598,7 @@ function editPlan(): void {
               row.status === 'confirmed' ? '已确认' : row.status === 'pending' ? '待确认' : '已撤销'
             }}</view
           ><view class="sub"
-            >{{ row.date }} · {{ row.qty || '—' }} {{ item.type === 'GOLD' ? '克' : '份' }}</view
+            >{{ row.date }} · {{ row.qty || '—' }} {{ instrumentUnit(item) }}</view
           ></view
         ><view
           ><view>{{
@@ -590,6 +625,14 @@ function editPlan(): void {
   ><view v-else class="screen empty">该标的尚未加入自选或账本，请返回重新选择。 </view>
 </template>
 <style scoped>
+.quote-fx {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+  color: #8593ac;
+  font-size: 12px;
+}
 .plan-next {
   margin-top: 16px;
   font-size: 15px;

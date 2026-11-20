@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { currencyOf, instrumentUnit, isForeign, quoteCnyValue } from '../domain/currency'
 import { formatDateTime } from '../domain/display-time'
 import AppPicker from './AppPicker.vue'
 import InstrumentSearchSheet from './InstrumentSearchSheet.vue'
@@ -57,6 +58,7 @@ const form = reactive({
   time: '',
   qty: '',
   price: '',
+  settlementAmount: '',
   fee: '0',
   totalCost: '',
   importCost: '',
@@ -196,6 +198,22 @@ const records = computed(() =>
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date) || b.sequence - a.sequence),
 )
+/** 历史记录按已保存标的身份展示数量单位，不依赖当前表单选择。 */
+function itemUnit(id: string): string {
+  const item = items.value.find((row) => row.id === id)
+  return item ? instrumentUnit(item) : '份'
+}
+/** 原币成交价与人民币账户收支分别展示，避免港美股币种混淆。 */
+function itemCurrency(id: string): string {
+  const item = items.value.find((row) => row.id === id)
+  return item ? currencyOf(item) : 'CNY'
+}
+/** 行情原币价格通过报价附带汇率折成人民币；缺少汇率时不猜测市值。 */
+function positionValue(id: string, qty: string): string {
+  const quote = watchState.cache[id]?.quote
+  const price = quote && quoteCnyValue(quote)
+  return price ? formatMoney(new D(qty).mul(price)) + ' 元' : '待报价'
+}
 const detail = computed(() => bookState.data.trades.find((t) => t.id === detailId.value))
 const outcome = computed(() => projection.value.trades[detailId.value])
 const realizedTotal = computed(() =>
@@ -302,7 +320,7 @@ function open(
   try {
     const draft = readFormDraft<EntryDraft>(draftKey)
     if (draft) {
-      Object.assign(form, draft.form)
+      Object.assign(form, draft.form, { settlementAmount: draft.form.settlementAmount || '' })
       form.importInstrument = draft.form.importInstrument
       form.importCostMode = draft.form.importCostMode || 'total'
       form.importCost = draft.form.importCost ?? draft.form.totalCost ?? ''
@@ -337,6 +355,7 @@ function open(
     time: '',
     qty: '',
     price: '',
+    settlementAmount: '',
     fee: '0',
     totalCost: '',
     importCost: '',
@@ -373,7 +392,11 @@ function open(
     })
   }
   if (next === 'trade' && !planId) form.planId = linkedPlans.value[0]?.id || ''
-  if (next === 'trade') fillGoldPrice()
+  if (next === 'trade') {
+    fillGoldPrice()
+    if (instrument.value && isForeign(instrument.value))
+      form.price = watchState.cache[instrument.value.id]?.quote.value || ''
+  }
   if (next === 'plan' && planId) {
     const plan = bookState.data.plans.find((p) => p.id === planId)!
     editingPlanId.value = planId
@@ -410,6 +433,7 @@ function chooseInstrument(item: Instrument): void {
   form.status = 'confirmed'
   form.qty = ''
   form.price = ''
+  form.settlementAmount = ''
   form.goldAmount = ''
   form.goldMode = '克'
   if (mode.value === 'import') {
@@ -473,6 +497,7 @@ function setPrice(event: Event): void {
 function setSide(side: string): void {
   if (form.side === side) return
   form.side = side
+  if (instrument.value && isForeign(instrument.value)) form.settlementAmount = ''
   fillGoldPrice()
 }
 /** 日期确认后先完成选择面板退场，再允许提交下层表单。 */
@@ -528,6 +553,7 @@ function editTrade(): void {
     time: row.time,
     qty: row.qty,
     price: row.price,
+    settlementAmount: row.settlementAmount || '',
     fee: row.fee,
     planId: row.planId || '',
     status: 'confirmed',
@@ -644,6 +670,9 @@ async function submit(): Promise<void> {
         orderConfirmed: false,
         qty: form.qty,
         price: form.price,
+        ...(instrument.value && isForeign(instrument.value)
+          ? { settlementAmount: form.settlementAmount }
+          : {}),
         fee: form.fee,
         pendingAmount: form.pendingAmount,
       }
@@ -693,7 +722,7 @@ async function removeRecord(id: string): Promise<void> {
   try {
     const confirmed = await dialog.confirm({
       title: '删除这笔记录？',
-      detail: `${itemName(row.instrumentId)} · ${labelTrade(row)}\n${row.date} ${row.time || ''} · ${accountName(row.accountId)}\n${row.qty || '待确认'} ${items.value.find((i) => i.id === row.instrumentId)?.type === 'GOLD' ? '克' : '份'} · ${tradeAmount(row)}`,
+      detail: `${itemName(row.instrumentId)} · ${labelTrade(row)}\n${row.date} ${row.time || ''} · ${accountName(row.accountId)}\n${row.qty || '待确认'} ${itemUnit(row.instrumentId)} · ${tradeAmount(row)}`,
       confirmText: '删除',
       destructive: true,
     })
@@ -879,13 +908,16 @@ defineExpose({ open, showRecord, removeRecord })
         ><view
           ><view class="metric-label">数量 / 单价</view
           ><view class="metric-value"
-            >{{ detail.qty || '—' }} / {{ detail.price || '—' }}</view
+            >{{ detail.qty || '—' }} {{ itemUnit(detail.instrumentId) }} / {{ detail.price || '—' }}
+            {{ itemCurrency(detail.instrumentId) }}</view
           ></view
         ><view
-          ><view class="metric-label">手续费</view
+          ><view class="metric-label">手续费（元）</view
           ><view class="metric-value">{{ formatMoney(detail.fee) }}</view></view
         ><view v-if="outcome"
-          ><view class="metric-label">{{ detail.side === 'buy' ? '买入支出' : '卖出到账' }}</view
+          ><view class="metric-label">{{
+            detail.side === 'buy' ? '买入支出（元）' : '卖出到账（元）'
+          }}</view
           ><view class="metric-value">{{ formatMoney(outcome.net) }}</view></view
         ><view v-if="outcome?.realizedPnl !== undefined"
           ><view class="metric-label">已实现盈利（扣费）</view
@@ -916,7 +948,11 @@ defineExpose({ open, showRecord, removeRecord })
           {{ itemName(entry.previous.instrumentId) }} · {{ accountName(entry.previous.accountId)
           }}<view
             >{{ entry.previous.date }} {{ entry.previous.time }} · {{ entry.previous.qty }} ×
-            {{ entry.previous.price }} · 手续费 {{ entry.previous.fee }}</view
+            {{ entry.previous.price }} {{ itemCurrency(entry.previous.instrumentId) }} · 手续费
+            {{ entry.previous.fee }} 元<view v-if="entry.previous.settlementAmount"
+              >实际人民币{{ entry.previous.side === 'buy' ? '支出' : '到账' }}
+              {{ entry.previous.settlementAmount }} 元</view
+            ></view
           ></view
         ></template
       >
@@ -931,15 +967,10 @@ defineExpose({ open, showRecord, removeRecord })
         ><view
           ><view>{{ itemName(position.instrumentId) }}</view
           ><view class="sub"
-            >{{ accountName(position.accountId) }} · {{ position.qty }} 份/克</view
+            >{{ accountName(position.accountId) }} · {{ position.qty }}
+            {{ itemUnit(position.instrumentId) }}</view
           ></view
-        ><text>{{
-          watchState.cache[position.instrumentId]
-            ? formatMoney(
-                new D(position.qty).mul(watchState.cache[position.instrumentId].quote.value),
-              ) + ' 元'
-            : '待报价'
-        }}</text></view
+        ><text>{{ positionValue(position.instrumentId, position.qty) }}</text></view
       >
     </template>
     <template v-else>
@@ -1013,10 +1044,21 @@ defineExpose({ open, showRecord, removeRecord })
         ></template>
         <template v-if="mode === 'import'"
           ><label class="field"
-            >{{ instrument?.type === 'GOLD' ? '持有克重' : '持有份额'
+            >{{
+              instrument?.type === 'GOLD'
+                ? '持有克重（克）'
+                : instrument?.type === 'STOCK'
+                  ? '持有数量（股）'
+                  : '持有份额（份）'
             }}<input v-model="form.qty" type="digit" /></label
           ><label class="field">
-            {{ instrument?.type === 'GOLD' ? '持仓成本价（元/克）' : '持仓成本价（元/份）' }}
+            {{
+              instrument?.type === 'GOLD'
+                ? '持仓成本价（元/克）'
+                : instrument?.type === 'STOCK'
+                  ? '持仓成本价（人民币元/股）'
+                  : '持仓成本价（元/份）'
+            }}
             <input
               :value="form.importUnitCost"
               type="digit"
@@ -1102,17 +1144,28 @@ defineExpose({ open, showRecord, removeRecord })
           <template v-else>
             <view class="field-pair">
               <label class="field"
-                >份额<input
+                >{{ instrument?.type === 'STOCK' ? '数量（股）' : '份额（份）'
+                }}<input
                   v-model="form.qty"
                   type="digit"
                   placeholder="以确认结果为准"
                   @input="setQty"
               /></label>
               <label v-if="form.status === 'confirmed'" class="field"
-                >成交价 / 净值<input v-model="form.price" type="digit" @input="setPrice"
+                >成交价 / 净值（{{ instrument ? currencyOf(instrument) : 'CNY' }}）<input
+                  v-model="form.price"
+                  type="digit"
+                  @input="setPrice"
               /></label>
             </view>
           </template>
+          <label
+            v-if="instrument && isForeign(instrument) && form.status === 'confirmed'"
+            class="field"
+          >
+            实际人民币{{ form.side === 'buy' ? '支出（含费）' : '到账（扣费后）' }}（元）
+            <input v-model="form.settlementAmount" type="digit" placeholder="按实际结算金额填写" />
+          </label>
           <label class="field"
             >{{ form.status === 'pending' ? '预留手续费' : '手续费' }}（元）<input
               v-model="form.fee"
@@ -1153,10 +1206,10 @@ defineExpose({ open, showRecord, removeRecord })
               }}</view
             ></view
           ><label class="field"
-            >上次买入价（可选）<input
+            >上次买入价（人民币元，可选）<input
               v-model="form.lastBuy"
               type="digit"
-              placeholder="填写上一笔买入的成交价" /></label
+              placeholder="填写上一笔买入的人民币单价" /></label
         ></template>
       </template>
     </template>

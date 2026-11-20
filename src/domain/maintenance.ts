@@ -35,6 +35,7 @@ export function maintainOpening(
     delete plan.signal
     delete plan.signalDate
     delete plan.lastQuoteDate
+    delete plan.lastFxDate
     appendPlanEvent(plan, {
       kind: 'opening',
       previous,

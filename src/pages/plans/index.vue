@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isForeign, quoteCnyValue } from '../../domain/currency'
 import AppPicker from '../../components/AppPicker.vue'
 import PageOverlays from '../../components/PageOverlays.vue'
 import { usePageSelection } from '../../composables/useSelection'
@@ -74,15 +75,18 @@ function latestPrice(plan: Plan) {
   const quote = watchState.cache[plan.instrumentId]?.quote
   const selling = threshold(plan)?.thresholdLabel === '回撤止盈价'
   const gold = instrument?.type === 'GOLD'
-  const value = gold && !selling ? quote?.buyValue : quote?.value
+  const foreign = instrument && isForeign(instrument)
+  const value = quote ? quoteCnyValue(quote, gold && !selling) : undefined
   return {
-    label: gold
-      ? selling
-        ? '最新卖出价'
-        : '最新买入价'
-      : instrument?.type === 'FUND'
-        ? '最新净值'
-        : '最新价',
+    label: foreign
+      ? '最新折算价 · 元'
+      : gold
+        ? selling
+          ? '最新卖出价'
+          : '最新买入价'
+        : instrument?.type === 'FUND'
+          ? '最新净值'
+          : '最新价',
     value: value ? formatMoney(value, gold ? 2 : 4) : '—',
     date: quote?.date.slice(5, 16) || '',
   }
@@ -160,7 +164,10 @@ function outcome(plan: Plan) {
                   : bookState.data.instruments.find((i) => i.id === plan.instrumentId)?.type ===
                       'ETF'
                     ? 'ETF'
-                    : '基'
+                    : bookState.data.instruments.find((i) => i.id === plan.instrumentId)?.type ===
+                        'STOCK'
+                      ? '股'
+                      : '基'
               }}</view
             ><view
               ><view class="asset-name">{{
@@ -196,7 +203,13 @@ function outcome(plan: Plan) {
         </view>
         <view v-else class="plan-stats"
           ><view
-            ><text class="small muted">{{ threshold(plan)?.thresholdLabel || '下一加仓价' }}</text
+            ><text class="small muted"
+              >{{ threshold(plan)?.thresholdLabel || '下一加仓价'
+              }}{{
+                isForeign(bookState.data.instruments.find((i) => i.id === plan.instrumentId)!)
+                  ? ' · 元'
+                  : ''
+              }}</text
             ><view class="plan-number num blue">{{
               threshold(plan)?.threshold
                 ? formatMoney(threshold(plan)!.threshold!, 4)

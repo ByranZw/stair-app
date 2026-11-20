@@ -9,6 +9,17 @@ export default defineConfig({
     port: 5178,
     strictPort: true,
     proxy: {
+      '^/market/stock-search/s3/(?:\\?|$)': {
+        target: 'https://smartbox.gtimg.cn',
+        changeOrigin: true,
+        rewrite: (path) => path.replace('/market/stock-search', ''),
+      },
+      '^/market/fx/list=(?:fx_susdcny|fx_shkdcny)$': {
+        target: 'https://hq.sinajs.cn',
+        changeOrigin: true,
+        headers: { Referer: 'https://finance.sina.com.cn/' },
+        rewrite: (path) => path.replace('/market/fx', ''),
+      },
       '^/market/sge/graph/(?:Dailyhq|quotations)$': {
         target: 'https://www.sge.com.cn',
         changeOrigin: true,

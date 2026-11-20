@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { instrumentLabel, instrumentUnit } from '../../domain/currency'
 import PageOverlays from '../../components/PageOverlays.vue'
 import { usePageSelection } from '../../composables/useSelection'
 usePageSelection(true)
@@ -52,6 +53,7 @@ const rows = computed(() =>
     (p) =>
       filter.value === '全部' ||
       (filter.value === 'ETF' && p.item.type === 'ETF') ||
+      (filter.value === '股票' && p.item.type === 'STOCK') ||
       (filter.value === '场外基金' && p.item.type === 'FUND') ||
       (filter.value === '积存金' && p.item.type === 'GOLD'),
   ),
@@ -212,7 +214,7 @@ function openWatchlist(): void {
       >
       <view class="chips"
         ><button
-          v-for="label in ['全部', 'ETF', '场外基金', '积存金']"
+          v-for="label in ['全部', 'ETF', '股票', '场外基金', '积存金']"
           :key="label"
           :class="{ active: filter === label }"
           @click="filter = label"
@@ -246,48 +248,50 @@ function openWatchlist(): void {
           {{ pending.length ? '处理待确认记录' : '＋ 添加自选标的' }}
         </button></view
       >
-      <button
-        v-for="row in rows"
-        :key="row.accountId + '/' + row.instrumentId"
-        class="position"
-        @click="detail(row.instrumentId, row.accountId)"
-      >
-        <view class="row"
-          ><view class="position-title"
-            ><text class="position-name">{{ row.item.name }}</text
-            ><text class="badge" :class="{ gold: row.item.type === 'GOLD' }">{{
-              row.item.type === 'GOLD' ? '积存金' : row.item.type === 'ETF' ? 'ETF' : '场外基金'
+      <view v-if="rows.length" class="holding-list">
+        <button
+          v-for="row in rows"
+          :key="row.accountId + '/' + row.instrumentId"
+          class="position"
+          @click="detail(row.instrumentId, row.accountId)"
+        >
+          <view class="row"
+            ><view class="position-title"
+              ><text class="position-name">{{ row.item.name }}</text
+              ><text class="badge" :class="{ gold: row.item.type === 'GOLD' }">{{
+                instrumentLabel(row.item)
+              }}</text></view
+            ><text class="muted">›</text></view
+          >
+          <view class="position-code"
+            >{{ bookState.data.accounts.find((a) => a.id === row.accountId)?.name }} ·
+            {{ row.item.code }} · {{ hidden ? '••••' : row.qty }}
+            {{ instrumentUnit(row.item) }}</view
+          >
+          <view class="position-values"
+            ><view
+              ><text class="position-number num">{{ display(row.value?.toString()) }}</text
+              ><text class="position-label">持仓市值</text></view
+            ><view
+              ><text class="position-number num" :class="row.pnl?.gte(0) ? 'up' : 'down'">{{
+                display(row.pnl?.toString())
+              }}</text
+              ><text class="position-label">持仓收益</text></view
+            ><view
+              ><text class="position-number num" :class="row.pnl?.gte(0) ? 'up' : 'down'"
+                >{{ display(row.pnl?.div(row.totalCost).mul(100).toString())
+                }}{{ row.pnl && !hidden ? '%' : '' }}</text
+              ><text class="position-label">收益率</text></view
+            ></view
+          >
+          <view class="position-bottom"
+            ><text>{{ positionStatus(row.accountId, row.instrumentId) }}</text
+            ><text>{{
+              row.stale ? '缓存报价' : watchState.cache[row.instrumentId]?.quote.date || '等待报价'
             }}</text></view
-          ><text class="muted">›</text></view
-        >
-        <view class="position-code"
-          >{{ bookState.data.accounts.find((a) => a.id === row.accountId)?.name }} ·
-          {{ row.item.code }} · {{ hidden ? '••••' : row.qty }}
-          {{ row.item.type === 'GOLD' ? '克' : '份' }}</view
-        >
-        <view class="position-values"
-          ><view
-            ><text class="position-number num">{{ display(row.value?.toString()) }}</text
-            ><text class="position-label">持仓市值</text></view
-          ><view
-            ><text class="position-number num" :class="row.pnl?.gte(0) ? 'up' : 'down'">{{
-              display(row.pnl?.toString())
-            }}</text
-            ><text class="position-label">持仓收益</text></view
-          ><view
-            ><text class="position-number num" :class="row.pnl?.gte(0) ? 'up' : 'down'"
-              >{{ display(row.pnl?.div(row.totalCost).mul(100).toString())
-              }}{{ row.pnl && !hidden ? '%' : '' }}</text
-            ><text class="position-label">收益率</text></view
-          ></view
-        >
-        <view class="position-bottom"
-          ><text>{{ positionStatus(row.accountId, row.instrumentId) }}</text
-          ><text>{{
-            row.stale ? '缓存报价' : watchState.cache[row.instrumentId]?.quote.date || '等待报价'
-          }}</text></view
-        >
-      </button>
+          >
+        </button>
+      </view>
     </template>
     <BookActions ref="actions" tab-page /><AppToast />
     <PageOverlays />
@@ -295,6 +299,15 @@ function openWatchlist(): void {
 </template>
 
 <style scoped>
+.holding-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.holding-list .position {
+  margin: 0;
+}
+
 .onboarding .btn {
   margin-top: 18px;
 }

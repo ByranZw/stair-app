@@ -7,7 +7,15 @@ export function isStrategyQuoteFresh(quote: Quote, now = Date.now()): boolean {
   const fresh = now - Date.parse(quote.fetchedAt)
   const marketDate = new Date(now + 8 * 3600000).toISOString().slice(0, 10)
   const marketAge = Date.parse(marketDate) - Date.parse(quote.date.slice(0, 10))
-  return fresh >= 0 && fresh < 900000 && marketAge >= 0 && marketAge <= 7 * 86400000
+  const fxAge = quote.fxDate ? Date.parse(marketDate) - Date.parse(quote.fxDate.slice(0, 10)) : 0
+  return (
+    fresh >= 0 &&
+    fresh < 900000 &&
+    marketAge >= 0 &&
+    marketAge <= 7 * 86400000 &&
+    fxAge >= 0 &&
+    fxAge <= 7 * 86400000
+  )
 }
 
 /** 每次只处理新鲜、已核验的报价；不把缓存、候选黄金或提醒当实际成交。 */
@@ -30,8 +38,16 @@ export function evaluatePlan(
     new D(quote.value).lte(0)
   )
     return { ...plan }
-  if (plan.lastQuoteDate && quote.date <= plan.lastQuoteDate) return { ...plan }
-  const next = { ...plan, lastQuoteDate: quote.date }
+  // 原币价格与汇率各自单调推进；同一收盘价允许用更新汇率重新计算人民币策略。
+  if (plan.lastQuoteDate && quote.date < plan.lastQuoteDate) return { ...plan }
+  if (plan.lastFxDate && (!quote.fxDate || quote.fxDate < plan.lastFxDate)) return { ...plan }
+  if (plan.lastQuoteDate === quote.date && (!quote.fxDate || quote.fxDate === plan.lastFxDate))
+    return { ...plan }
+  const next = {
+    ...plan,
+    lastQuoteDate: quote.date,
+    ...(quote.fxDate ? { lastFxDate: quote.fxDate } : {}),
+  }
   if (next.signal === 'sell') return next
   const pending = trades.some((t) => t.planId === plan.id && t.status === 'pending')
   const unitBudget = new D(plan.budget).div(plan.parts).toDecimalPlaces(2)

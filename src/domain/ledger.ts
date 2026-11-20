@@ -1,7 +1,9 @@
+import { validInstrument, isForeign } from './currency'
+import type { Instrument } from './market'
 import type { Account, Book, CorporateAction, Plan, Projection, Trade } from './book'
 import { positionKey } from './book'
 import { appendPlanEvent, planSnapshot, validatePlanHistory } from './plan-history'
-import { D, decimalInput, money, validDate } from './money'
+import { D, decimalInput, derivedPrice, money, validDate } from './money'
 
 /** 更正基准后完整重放历史；不生成虚假转入，校验失败绝不修改调用方账本。 */
 export function correctAccount(
@@ -50,7 +52,7 @@ export function validateBook(book: Book): void {
         !row ||
         typeof row.id !== 'string' ||
         !row.id ||
-        !/^[A-Za-z0-9][A-Za-z0-9:_-]{0,99}$/.test(row.id) ||
+        !/^[A-Za-z0-9][A-Za-z0-9:_.-]{0,99}$/.test(row.id) ||
         row.id in Object.prototype ||
         ids.has(row.id)
       )
@@ -65,21 +67,7 @@ export function validateBook(book: Book): void {
     validDate(account.date)
   }
   for (const item of book.instruments) {
-    if (
-      !['ETF', 'FUND', 'GOLD'].includes(item.type) ||
-      typeof item.name !== 'string' ||
-      !item.name.trim() ||
-      item.name.length > 80
-    )
-      throw new Error('标的身份不完整')
-    if (
-      item.type === 'GOLD'
-        ? item.id !== 'GOLD:CMB-GOLD' || item.code !== 'CMB-GOLD'
-        : !/^\d{6}$/.test(item.code) || item.id !== `${item.type}:${item.code}`
-    )
-      throw new Error('标的代码无效')
-    if (item.type === 'ETF' && !['sh', 'sz'].includes(item.market || ''))
-      throw new Error('ETF市场缺失')
+    if (!validInstrument(item)) throw new Error('标的身份或市场代码无效')
   }
   for (const row of [
     ...book.openings,
@@ -176,6 +164,9 @@ export function validateBook(book: Book): void {
         decimalInput(previous.qty, '原成交数量')
         decimalInput(previous.price, '原成交单价')
         decimalInput(previous.fee, '原手续费', 2, true)
+        const originalItem = book.instruments.find((item) => item.id === previous.instrumentId)
+        if (!originalItem) throw new Error('原成交标的不存在')
+        validateSettlement(previous, originalItem)
       }
     }
     if (
@@ -202,6 +193,10 @@ export function validateBook(book: Book): void {
     if (trade.status === 'confirmed') {
       decimalInput(trade.qty, '成交数量')
       decimalInput(trade.price, '成交单价')
+      validateSettlement(
+        trade,
+        book.instruments.find((item) => item.id === trade.instrumentId)!,
+      )
     }
     if (trade.status === 'pending') {
       if (book.instruments.find((i) => i.id === trade.instrumentId)!.type !== 'FUND')
@@ -243,6 +238,8 @@ export function validatePlan(plan: Plan): void {
     throw new Error('计划提醒类型无效')
   if (plan.lastQuoteDate !== undefined && typeof plan.lastQuoteDate !== 'string')
     throw new Error('计划行情日期无效')
+  if (plan.lastFxDate !== undefined && typeof plan.lastFxDate !== 'string')
+    throw new Error('计划汇率日期无效')
   if (plan.signalDate !== undefined && typeof plan.signalDate !== 'string')
     throw new Error('计划提醒日期无效')
   decimalInput(plan.budget, '计划预算', 2)
@@ -253,8 +250,8 @@ export function validatePlan(plan: Plan): void {
       throw new Error('加仓跌幅与回撤比例须小于100%')
   if (decimalInput(plan.observe, '观察收益率', 4).gt(10000))
     throw new Error('观察收益率超出有效范围')
-  if (plan.initialLastBuy) decimalInput(plan.initialLastBuy, '上次实际买入价')
-  if (plan.high) decimalInput(plan.high, '已采集高点')
+  if (plan.initialLastBuy) derivedPrice(plan.initialLastBuy, '上次实际买入价')
+  if (plan.high) derivedPrice(plan.high, '已采集高点')
   if (
     !Number.isInteger(plan.version) ||
     plan.version < 1 ||
@@ -428,6 +425,10 @@ export function projectBook(book: Book, throughDate?: string): Projection {
         throw new Error('实际金额与克重、单价不一致，请核对银行确认值')
       gross = entered
     }
+    if (trade.settlementAmount !== undefined) {
+      const net = new D(trade.settlementAmount)
+      gross = trade.side === 'buy' ? net.minus(fee) : net.plus(fee)
+    }
     if (gross.lte(0)) throw new Error('成交金额小于有效记账精度')
     const plan = trade.planId ? result.plans[trade.planId] : undefined
     if (plan?.ended) throw new Error('本轮计划已结束，请新建下一轮再关联后续成交')
@@ -445,7 +446,9 @@ export function projectBook(book: Book, throughDate?: string): Projection {
       result.trades[trade.id] = { id: trade.id, gross: money(gross), net: money(net) }
       if (plan) {
         plan.used = money(new D(plan.used).plus(net))
-        plan.lastBuy = trade.price
+        plan.lastBuy = isForeign(book.instruments.find((item) => item.id === trade.instrumentId)!)
+          ? gross.div(qty).toString()
+          : trade.price
       }
     } else {
       if (qty.gt(position.qty))
@@ -568,6 +571,7 @@ export function recordTrade(
       delete plan.signal
       delete plan.signalDate
       delete plan.lastQuoteDate
+      delete plan.lastFxDate
     } else if (plan.signal === 'buy') {
       // 申请仅预留资金或份额；撤回待买提醒，不丢弃既有持仓的止盈高点。
       delete plan.signal
@@ -612,6 +616,7 @@ export function correctTrade(book: Book, input: Trade, confirmOrder = false): Bo
     'qty',
     'price',
     'fee',
+    'settlementAmount',
     'inputAmount',
     'inputBasis',
   ] as const
@@ -648,6 +653,7 @@ export function correctTrade(book: Book, input: Trade, confirmOrder = false): Bo
       delete plan.signal
       delete plan.signalDate
       delete plan.lastQuoteDate
+      delete plan.lastFxDate
       appendPlanEvent(plan, { kind: 'trade', tradeId: old.id, previous: prior, reason })
     }
   }
@@ -672,6 +678,7 @@ export function deleteTrade(book: Book, id: string): Book {
       delete plan.signal
       delete plan.signalDate
       delete plan.lastQuoteDate
+      delete plan.lastFxDate
     }
     appendPlanEvent(plan, {
       kind: 'trade',
@@ -715,6 +722,7 @@ export function recordCorporateAction(book: Book, input: CorporateAction): Book 
     delete plan.signal
     delete plan.signalDate
     delete plan.lastQuoteDate
+    delete plan.lastFxDate
     appendPlanEvent(plan, {
       kind: 'corporate-action',
       previous,
@@ -725,4 +733,14 @@ export function recordCorporateAction(book: Book, input: CorporateAction): Book 
     })
   }
   return next
+}
+
+/** 海外确认单必须给出实际人民币净额；境内不接受覆盖原成交算法的结算值。 */
+function validateSettlement(trade: Trade | Omit<Trade, 'corrections'>, item: Instrument): void {
+  if (isForeign(item)) {
+    const net = decimalInput(trade.settlementAmount!, '实际人民币结算金额', 2)
+    if (trade.side === 'buy' && net.lte(trade.fee)) throw new Error('人民币支出须大于手续费')
+    if (trade.inputAmount !== undefined || trade.inputBasis !== undefined)
+      throw new Error('股票不使用黄金换算字段')
+  } else if (trade.settlementAmount !== undefined) throw new Error('境内成交不使用外币结算金额')
 }

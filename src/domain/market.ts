@@ -3,13 +3,19 @@ export interface Instrument {
   id: string
   code: string
   name: string
-  type: 'ETF' | 'FUND' | 'GOLD'
-  market?: 'sh' | 'sz'
+  type: 'ETF' | 'FUND' | 'GOLD' | 'STOCK'
+  market?: 'sh' | 'sz' | 'bj' | 'hk' | 'us'
+  currency?: 'CNY' | 'HKD' | 'USD'
 }
 /** 价格保留供应方十进制文本，显示涨跌不参与账本结算。 */
 export interface Quote {
   instrumentId: string
   value: string
+  currency?: 'CNY' | 'HKD' | 'USD'
+  fxRate?: string
+  fxDate?: string
+  fxSource?: string
+  delayed?: boolean
   previous?: string
   date: string
   source: string
@@ -51,4 +57,5 @@ export interface History {
   resolution?: 'day' | 'minute'
 }
 /** 网络层只接受预定义来源，防止把开发代理当任意URL转发器。 */
-export type Provider = 'tencent' | 'fund-search' | 'fund-nav' | 'fund-actions' | 'cmb' | 'sge'
+export type Provider =
+  'tencent' | 'fund-search' | 'fund-nav' | 'fund-actions' | 'cmb' | 'sge' | 'stock-search' | 'fx'

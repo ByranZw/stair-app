@@ -14,6 +14,15 @@ export function decimalInput(value: string, label: string, places = 8, allowZero
     throw new Error(`${label}必须${allowZero ? '不小于' : '大于'}0且在有效范围内`)
   return number
 }
+/** 派生报价沿用40位十进制运算精度，接受Decimal输出的科学计数法，不套用成交输入8位限制。 */
+export function derivedPrice(value: string, label: string): Decimal {
+  if (typeof value !== 'string' || !/^\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value))
+    throw new Error(`${label}格式不正确`)
+  const number = new D(value)
+  if (!number.isFinite() || number.lte(0) || number.gt('1e40') || number.precision() > 40)
+    throw new Error(`${label}超出有效精度或范围`)
+  return number
+}
 /** 显示金额到分；运算在调用方保持Decimal，避免二进制浮点结算。 */
 export function money(value: Decimal.Value): string {
   return new D(value).toFixed(2)

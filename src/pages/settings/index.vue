@@ -67,7 +67,7 @@ async function checkGold() {
         <text>行情与数据来源</text><text class="muted">免费来源 ›</text>
       </button></view
     >
-    <view class="version-note">拾阶 STAIR · 0.1.10</view>
+    <view class="version-note">拾阶 STAIR · 0.1.11</view>
     <BookActions ref="actions" tab-page /><DataMaintenance ref="maintenance" tab-page /><AppToast />
     <BottomSheet v-model="sheet" :title="section" tab-page :contained="section === '数据备份'">
       <template v-if="section === '默认投资策略'"
@@ -87,7 +87,7 @@ async function checkGold() {
       >
       <template v-else-if="section === '行情与数据来源'"
         ><view class="setting-row"
-          ><text>ETF 行情 / 历史</text><text class="blue">腾讯财经</text></view
+          ><text>ETF / 股票行情与历史</text><text class="blue">腾讯财经</text></view
         ><view class="setting-row"
           ><text>基金检索 / 正式净值</text><text class="blue">东方财富</text></view
         ><view class="setting-row"

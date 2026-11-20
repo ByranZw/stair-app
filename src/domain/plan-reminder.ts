@@ -40,13 +40,15 @@ export function describePlanReminder(
     signalDate: plan.signalDate,
     quoteDate: quote?.date,
     quoteSource: quote?.source,
-    priceLabel: quote?.buyValue
-      ? plan.signal === 'buy'
-        ? '客户买入价'
-        : '客户卖出价'
-      : quote?.kind === 'nav'
-        ? '正式净值'
-        : '市场价',
+    priceLabel: quote?.fxRate
+      ? '人民币折算价'
+      : quote?.buyValue
+        ? plan.signal === 'buy'
+          ? '客户买入价'
+          : '客户卖出价'
+        : quote?.kind === 'nav'
+          ? '正式净值'
+          : '市场价',
     quoteValue: quote
       ? plan.signal === 'buy'
         ? quote.buyValue || quote.value
@@ -87,7 +89,8 @@ export function describePlanReminder(
     sourceError ||
     !isStrategyQuoteFresh(quote, now) ||
     quote.tradable === false ||
-    plan.lastQuoteDate !== quote.date
+    plan.lastQuoteDate !== quote.date ||
+    (!!(quote.fxDate || plan.lastFxDate) && plan.lastFxDate !== quote.fxDate)
   )
     return {
       ...reminder,

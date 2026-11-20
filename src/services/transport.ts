@@ -1,5 +1,7 @@
 import type { Provider } from '../domain/market'
 const origins: Record<Provider, string> = {
+  'stock-search': 'https://smartbox.gtimg.cn',
+  fx: 'https://hq.sinajs.cn',
   tencent: 'https://proxy.finance.qq.com/ifzqgtimg',
   'fund-search': 'https://fundsuggest.eastmoney.com',
   'fund-nav': 'https://api.fund.eastmoney.com',
@@ -11,7 +13,7 @@ const origins: Record<Provider, string> = {
 export function providerUrl(provider: Provider, path: string): string {
   let origin = origins[provider]
   // #ifdef H5
-  if (import.meta.env.DEV) origin = `/market/${provider}`
+  if (import.meta.env?.DEV) origin = `/market/${provider}`
   // #endif
   return origin + path
 }
@@ -20,6 +22,7 @@ export function requestText(provider: Provider, path: string, data?: string): Pr
   const header: Record<string, string> = {}
   if (data) header['Content-Type'] = 'application/x-www-form-urlencoded'
   // #ifdef APP-PLUS
+  if (provider === 'fx') header.Referer = 'https://finance.sina.com.cn/'
   if (provider === 'fund-nav') header.Referer = 'https://fundf10.eastmoney.com/'
   if (provider === 'sge') header.Referer = 'https://www.sge.com.cn/sjzx/mrhq'
   // #endif

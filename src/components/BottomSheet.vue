@@ -7,6 +7,7 @@ const props = defineProps<{
   title: string
   tabPage?: boolean
   contained?: boolean
+  height?: string
   variant?: 'sheet' | 'dialog'
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; closed: [] }>()
@@ -127,6 +128,7 @@ onBeforeUnmount(() => {
     <view class="sheet-mask" @click="close" />
     <view
       class="sheet"
+      :style="height ? { height } : undefined"
       :role="variant === 'dialog' ? 'alertdialog' : 'dialog'"
       aria-modal="true"
       :aria-label="title"

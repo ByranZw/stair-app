@@ -1,3 +1,4 @@
+import { quoteInCny } from '../domain/currency'
 import { computed, ref, watch } from 'vue'
 import { describePlanReminder } from '../domain/plan-reminder'
 import { positionKey } from '../domain/book'
@@ -31,7 +32,9 @@ export const allPlanReminders = computed(() =>
       projection.value.plans[plan.id],
       projection.value.positions[positionKey(plan.accountId, plan.instrumentId)],
       bookState.data.trades,
-      watchState.cache[plan.instrumentId]?.quote,
+      watchState.cache[plan.instrumentId]?.quote
+        ? quoteInCny(watchState.cache[plan.instrumentId].quote)
+        : undefined,
       watchState.errors[plan.instrumentId],
       Math.max(clock.value, Date.now()),
     ),

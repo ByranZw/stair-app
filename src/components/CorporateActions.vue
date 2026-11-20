@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { instrumentUnit, isForeign } from '../domain/currency'
 import AppPicker from './AppPicker.vue'
 import { computed, reactive, ref, onBeforeUnmount } from 'vue'
 import type { CorporateAction } from '../domain/book'
@@ -10,6 +11,11 @@ import { saveFormDraft, readFormDraft, clearFormDraft } from '../state/form-draf
 import { usePickerGuard } from '../composables/usePickerGuard'
 const { pickerSettling, settlePicker } = usePickerGuard()
 const props = defineProps<{ accountId: string; instrumentId: string }>()
+const instrument = computed(() =>
+  bookState.data.instruments.find((item) => item.id === props.instrumentId),
+)
+const unit = computed(() => (instrument.value ? instrumentUnit(instrument.value) : '份'))
+const foreign = computed(() => !!instrument.value && isForeign(instrument.value))
 const visible = ref(false),
   editing = ref(false),
   saving = ref(false),
@@ -161,12 +167,12 @@ function open(): void {
           >到账 / 再投确认日期 {{ event.cashDate }}</view
         >
         <view v-if="event.status === 'confirmed'" class="tip"
-          >权益份额 {{ event.referenceQty }} 份 ·
+          >权益数量 {{ event.referenceQty }} {{ unit }} ·
           {{
             event.type === 'split'
               ? '拆分倍数 ' + event.ratio
               : event.type === 'reinvest'
-                ? '再投 ' + event.addedQty + ' 份 / ¥' + formatMoney(event.cashAmount)
+                ? '再投 ' + event.addedQty + ' ' + unit + ' / ¥' + formatMoney(event.cashAmount)
                 : '实际到账 ¥' + formatMoney(event.cashAmount)
           }}</view
         >
@@ -198,17 +204,17 @@ function open(): void {
         >来源<input v-model="form.source" placeholder="例如：基金公告" maxlength="200"
       /></label>
       <label class="field"
-        >生效前份额（份）<input
+        >生效前数量（{{ unit }}）<input
           v-model="form.referenceQty"
           type="digit"
-          placeholder="生效日开盘前实际持有份额"
+          placeholder="生效前实际持有数量"
       /></label>
       <template v-if="form.type === 'split'"
         ><label class="field"
-          >拆分后份额倍数<input
+          >拆分后数量倍数<input
             v-model="form.ratio"
             type="digit"
-            placeholder="例如：1份变2份，填2" /></label
+            placeholder="例如：1变2，填2" /></label
       ></template>
       <template v-else>
         <view class="field"
@@ -222,7 +228,9 @@ function open(): void {
           ></view
         >
         <label class="field"
-          >每份分红（元，公告值）<input v-model="form.cashPerShare" type="digit"
+          >每{{ unit }}分红（{{ foreign ? '折合人民币元' : '元' }}）<input
+            v-model="form.cashPerShare"
+            type="digit"
         /></label>
         <label class="field"
           >{{ form.type === 'reinvest' ? '再投确认金额' : '分红实际到账' }}（元）<input
@@ -230,7 +238,7 @@ function open(): void {
             type="digit"
         /></label>
         <label v-if="form.type === 'reinvest'" class="field"
-          >再投增加份额（份）<input v-model="form.addedQty" type="digit" /></label
+          >再投增加数量（{{ unit }}）<input v-model="form.addedQty" type="digit" /></label
       ></template>
     </template>
     <template #footer>

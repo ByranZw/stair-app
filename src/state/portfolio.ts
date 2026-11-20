@@ -1,3 +1,4 @@
+import { quoteCnyValue } from '../domain/currency'
 import { computed } from 'vue'
 import { bookState, projection, selectedAccountId } from './book'
 import { watchState } from './watchlist'
@@ -12,7 +13,8 @@ export const portfolio = computed(() => {
     .map((position) => {
       const item = bookState.data.instruments.find((i) => i.id === position.instrumentId)!
       const cached = watchState.cache[item.id]
-      const value = cached ? new D(cached.quote.value).mul(position.qty) : undefined
+      const price = cached ? quoteCnyValue(cached.quote) : undefined
+      const value = price === undefined ? undefined : new D(price).mul(position.qty)
       const pnl = value?.minus(position.totalCost)
       return { ...position, item, value, pnl, stale: !!watchState.errors[item.id] }
     })

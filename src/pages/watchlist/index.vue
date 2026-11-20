@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { instrumentLabel, currencyOf } from '../../domain/currency'
 import PageOverlays from '../../components/PageOverlays.vue'
 import { usePageSelection } from '../../composables/useSelection'
 usePageSelection(true)
@@ -6,7 +7,7 @@ import { usePageDialog } from '../../composables/useDialog'
 import { usePageSheetBack } from '../../composables/useSheetBack'
 usePageSheetBack()
 const dialog = usePageDialog(true)
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onShow, onHide } from '@dcloudio/uni-app'
 import { watchState, addInstrument, removeInstrument, refreshAll } from '../../state/watchlist'
 import { searchInstruments } from '../../services/market'
@@ -14,11 +15,12 @@ import type { Instrument } from '../../domain/market'
 import AppIcon from '../../components/AppIcon.vue'
 import AppToast from '../../components/AppToast.vue'
 import { showToast } from '../../state/feedback'
+import SearchField from '../../components/SearchField.vue'
 import BottomSheet from '../../components/BottomSheet.vue'
 import HistoryChart from '../../components/HistoryChart.vue'
 const searching = ref(false),
   query = ref(''),
-  type = ref<'ETF' | 'FUND'>('ETF'),
+  type = ref<'ETF' | 'FUND' | 'STOCK'>('ETF'),
   results = ref<Instrument[]>([]),
   busy = ref(false),
   searched = ref(false),
@@ -31,12 +33,25 @@ const visible = computed(() =>
     (item) =>
       filter.value === '全部' ||
       (filter.value === 'ETF' && item.type === 'ETF') ||
+      (filter.value === '股票' && item.type === 'STOCK') ||
       (filter.value === '场外基金' && item.type === 'FUND') ||
       (filter.value === '积存金' && item.type === 'GOLD'),
   ),
 )
 let searchVersion = 0
 let suppressClickUntil = 0
+// 检索词变化时清掉旧结果并作废在途请求，清空后不残留上一次的匹配项。
+watch(
+  query,
+  () => {
+    searchVersion++
+    results.value = []
+    busy.value = false
+    searched.value = false
+    error.value = ''
+  },
+  { flush: 'sync' },
+)
 
 const chartVisible = ref(true)
 // Tab保留页面实例；隐藏时停止Canvas测量，避免用详情页上下文查询迷你图。
@@ -48,7 +63,7 @@ onHide(() => {
   pressed.value = ''
 })
 /** 筛选切换丢弃过时搜索，不把其他类型的返回值留在当前结果。 */
-function setType(value: 'ETF' | 'FUND') {
+function setType(value: 'ETF' | 'FUND' | 'STOCK') {
   type.value = value
   results.value = []
   searched.value = false
@@ -127,7 +142,7 @@ function quote(id: string): string {
     ></view>
     <view class="chips"
       ><button
-        v-for="label in ['全部', 'ETF', '场外基金', '积存金']"
+        v-for="label in ['全部', 'ETF', '股票', '场外基金', '积存金']"
         :key="label"
         :class="{ active: filter === label }"
         @click="filter = label"
@@ -143,9 +158,7 @@ function quote(id: string): string {
         ><view class="empty-title">{{
           filter === '积存金' ? '还没有关注黄金账户' : '还没有关注的标的'
         }}</view
-        ><view>{{
-          filter === '积存金' ? '添加招行黄金账户' : '添加ETF或基金，行情会保留在这里。'
-        }}</view></view
+        ><view>{{ filter === '积存金' ? '添加招行黄金账户' : '添加关注的投资标的' }}</view></view
       >
       <view
         v-for="item in visible"
@@ -170,11 +183,12 @@ function quote(id: string): string {
           <view
             ><text class="asset-name">{{ item.name }}</text
             ><view class="position-code"
-              >{{ item.code }} ·
-              {{ item.type === 'GOLD' ? '积存金' : item.type === 'ETF' ? 'ETF' : '场外基金' }}</view
+              >{{ item.code }} · {{ instrumentLabel(item)
+              }}{{ item.type === 'STOCK' ? ' · ' + currencyOf(item) : '' }}</view
             ></view
           ><view
             ><text class="num">{{ quote(item.id) }}</text
+            ><view v-if="watchState.cache[item.id]?.quote.delayed" class="position-code">延迟</view
             ><view class="position-code">{{
               watchState.loading[item.id]
                 ? '更新中'
@@ -206,26 +220,13 @@ function quote(id: string): string {
     <button class="add-watch" @click="searching = true">＋ 添加自选标的</button>
     <view class="row tip"><button class="text-btn blue" @click="refreshAll">刷新 ↻</button></view>
     <AppToast />
-    <BottomSheet v-model="searching" title="添加自选" tab-page>
-      <view class="search-form"
-        ><input
-          v-model="query"
-          :focus="searching"
-          class="search-input"
-          placeholder="搜索代码 / 基金名称"
-          maxlength="40"
-          confirm-type="search"
-          @confirm="search"
-        /><button class="small-action" :disabled="busy" @click="search">
-          {{ busy ? '查询中' : '搜索' }}
-        </button></view
-      >
-      <view class="filters"
-        ><button :class="{ active: type === 'ETF' }" @click="setType('ETF')">场内 ETF</button
-        ><button :class="{ active: type === 'FUND' }" @click="setType('FUND')">
-          场外基金
-        </button></view
-      >
+    <BottomSheet v-model="searching" title="添加自选" height="82%" tab-page>
+      <SearchField v-model="query" :busy="busy" :focus="searching" @search="search" />
+      <view class="filters">
+        <button :class="{ active: type === 'ETF' }" @click="setType('ETF')">场内 ETF</button>
+        <button :class="{ active: type === 'FUND' }" @click="setType('FUND')">场外基金</button>
+        <button :class="{ active: type === 'STOCK' }" @click="setType('STOCK')">股票</button>
+      </view>
       <view class="search-result"
         ><view
           ><view class="asset-name">招行黄金账户</view
@@ -240,14 +241,13 @@ function quote(id: string): string {
           {{ watchState.items.some((i) => i.type === 'GOLD') ? '已添加' : '＋ 自选' }}
         </button></view
       >
-      <view class="tip">请核对代码和份额类别</view
-      ><view v-if="error" class="error">{{ error }}</view>
+      <view v-if="error" class="error">{{ error }}</view>
       <view v-for="item in results" :key="item.id" class="search-result"
         ><view
           ><view class="asset-name">{{ item.name }}</view
           ><view class="position-code"
-            >{{ item.code }} ·
-            {{ item.type === 'GOLD' ? '积存金' : item.type === 'ETF' ? 'ETF' : '场外基金' }}</view
+            >{{ item.code }} · {{ instrumentLabel(item)
+            }}{{ item.type === 'STOCK' ? ' · ' + currencyOf(item) : '' }}</view
           ></view
         ><button
           class="small-action"

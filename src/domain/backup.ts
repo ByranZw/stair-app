@@ -101,6 +101,7 @@ export function prepareRestoredBook(book: Book): Book {
     plan.observing = false
     delete plan.high
     delete plan.lastQuoteDate
+    delete plan.lastFxDate
     delete plan.signal
     delete plan.signalDate
     appendPlanEvent(plan, {

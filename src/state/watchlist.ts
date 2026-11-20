@@ -1,3 +1,4 @@
+import { validInstrument } from '../domain/currency'
 import { reactive } from 'vue'
 import type { History, Instrument, Quote } from '../domain/market'
 import { fetchMarket, fetchMinute, fetchGoldHistory } from '../services/market'
@@ -47,17 +48,7 @@ function readStorage(key: string): unknown {
 function loadWatchlist(): Instrument[] {
   const saved = readStorage(WATCH_KEY)
   if (!Array.isArray(saved)) return []
-  return saved.filter(
-    (item): item is Instrument =>
-      !!item &&
-      typeof item === 'object' &&
-      ['ETF', 'FUND', 'GOLD'].includes(item.type) &&
-      (item.type === 'GOLD'
-        ? item.code === 'CMB-GOLD' && item.id === 'GOLD:CMB-GOLD'
-        : /^\d{6}$/.test(item.code) && item.id === `${item.type}:${item.code}`) &&
-      typeof item.name === 'string' &&
-      (item.type !== 'ETF' || ['sh', 'sz'].includes(item.market)),
-  )
+  return saved.filter((item): item is Instrument => validInstrument(item))
 }
 /** 缓存仅接受与标的匹配且带日期来源的数据；失败不能生成新价格。 */
 function loadCache(): Record<string, MarketCache> {
@@ -151,6 +142,14 @@ export function removeInstrument(id: string): void {
   uni.setStorageSync(WATCH_KEY, next)
   watchState.items = next
 }
+/** 股价与汇率各自不能倒退；保留完整的旧组合，避免刷新与历史回补交错时估值回退。 */
+function quoteRegresses(previous: Quote, next: Quote): boolean {
+  return (
+    next.date < previous.date ||
+    !!(previous.fxDate && (!next.fxDate || next.fxDate < previous.fxDate))
+  )
+}
+
 /** 同标的请求合并，旧时间响应不覆盖新报价；失败保留缓存并单独呈现。 */
 export function refreshInstrument(instrument: Instrument): Promise<void> {
   const existing = inflight.get(instrument.id)
@@ -161,8 +160,8 @@ export function refreshInstrument(instrument: Instrument): Promise<void> {
   const task = fetchMarket(instrument, start)
     .then((result) => {
       const previous = watchState.cache[instrument.id]
-      if (previous && previous.quote.date > result.quote.date)
-        throw new Error('来源返回较旧报价，已保留原缓存')
+      if (previous && quoteRegresses(previous.quote, result.quote))
+        throw new Error('来源返回较旧报价或汇率，已保留原缓存')
       const merged = {
         ...previous,
         ...result,
@@ -262,9 +261,10 @@ export async function loadMoreHistory(instrument: Instrument): Promise<void> {
       const previous = watchState.cache[instrument.id]
       const next = {
         ...previous,
-        quote: previous && previous.quote.date > result.quote.date ? previous.quote : result.quote,
+        quote:
+          previous && quoteRegresses(previous.quote, result.quote) ? previous.quote : result.quote,
         history:
-          previous && previous.quote.date > result.quote.date
+          previous && quoteRegresses(previous.quote, result.quote)
             ? mergeHistory(result.history, previous.history)
             : mergeHistory(previous?.history, result.history),
       }

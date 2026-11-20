@@ -3,6 +3,7 @@ import { requestJson, requestText } from './transport'
 import { readFundHistory } from './fund-history'
 import { parseCorporateHints } from './corporate-hints'
 import { parseEtf, parseGoldDiagnostic, parseGold, parseSearch, parseMinute } from './parsers'
+import { searchStocks, readStockMarket, readStockMinute } from './stocks'
 import { parseSgeDaily, parseSgeMinute } from './sge-history'
 
 /** 上金所仅提供独立市场参考曲线，不返回或替换招行账户的策略报价。 */
@@ -20,10 +21,11 @@ export async function fetchGoldHistory(instrument: Instrument, minute = false) {
 /** 仅用户主动提交时搜索，避免每次按键请求免费来源。 */
 export async function searchInstruments(
   query: string,
-  type: 'ETF' | 'FUND',
+  type: 'ETF' | 'FUND' | 'STOCK',
 ): Promise<Instrument[]> {
   const key = query.trim()
   if (!key || key.length > 40) throw new Error('请输入40字以内的名称或代码')
+  if (type === 'STOCK') return searchStocks(key)
   return parseSearch(
     await requestJson(
       'fund-search',
@@ -34,6 +36,7 @@ export async function searchInstruments(
 }
 /** 同次刷新核对报价与权益公告；公告失败保留旧缓存，避免除息被当成加仓跌幅。 */
 export async function fetchMarket(instrument: Instrument, start = '', count = 180) {
+  if (instrument.type === 'STOCK') return readStockMarket(instrument, start, count)
   if (instrument.type === 'GOLD') return fetchPrices(instrument, start, count)
   if (!/^\d{6}$/.test(instrument.code)) throw new Error('标的代码无效')
   const [result, html] = await Promise.all([
@@ -86,6 +89,7 @@ export async function diagnoseGold() {
 
 /** 分时按用户切换时查询，不启动持续轮询，也不把它作为场外基金估值。 */
 export async function fetchMinute(instrument: Instrument) {
+  if (instrument.type === 'STOCK') return readStockMinute(instrument)
   if (
     instrument.type !== 'ETF' ||
     !/^(sh|sz)$/.test(instrument.market || '') ||

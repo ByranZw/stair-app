@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { instrumentUnit } from '../domain/currency'
 import { computed, reactive, ref } from 'vue'
 import BottomSheet from './BottomSheet.vue'
 import AppPicker from './AppPicker.vue'
@@ -19,6 +20,11 @@ import { readFormDraft, saveFormDraft, clearFormDraft } from '../state/form-draf
 import { useDialog } from '../composables/useDialog'
 import { showToast } from '../state/feedback'
 
+/** 数量按原始标的类别展示，股票使用股、积存金使用克。 */
+function recordUnit(id: string): string {
+  const item = bookState.data.instruments.find((row) => row.id === id)
+  return item ? instrumentUnit(item) : '份'
+}
 const dialog = useDialog()
 const props = defineProps<{ tabPage?: boolean }>()
 const visible = ref(false),
@@ -268,15 +274,7 @@ defineExpose({ open, editOpening })
         <view class="maintenance-row"
           ><view class="row"
             ><text class="maintenance-name">{{ instrumentName(row.instrumentId) }}</text
-            ><text
-              >{{ row.qty }}
-              {{
-                bookState.data.instruments.find((item) => item.id === row.instrumentId)?.type ===
-                'GOLD'
-                  ? '克'
-                  : '份'
-              }}</text
-            ></view
+            ><text>{{ row.qty }} {{ recordUnit(row.instrumentId) }}</text></view
           ><view class="row sub"
             ><text>{{ accountName(row.accountId) }} · {{ row.date }}</text
             ><text>成本 ¥{{ formatMoney(row.totalCost) }}</text></view
@@ -336,14 +334,22 @@ defineExpose({ open, editOpening })
       <template v-if="kind === 'openings'">
         <view class="field"
           ><text class="label">{{
-            form.instrument?.type === 'GOLD' ? '持仓克重（克）' : '持仓数量（份）'
+            form.instrument?.type === 'GOLD'
+              ? '持仓克重（克）'
+              : form.instrument?.type === 'STOCK'
+                ? '持仓数量（股）'
+                : '持仓数量（份）'
           }}</text
           ><input v-model="form.qty" class="input" type="digit" @input="recalculate"
         /></view>
         <view class="maintenance-costs"
           ><view class="field"
             ><text class="label">{{
-              form.instrument?.type === 'GOLD' ? '成本价（元/克）' : '持仓成本价'
+              form.instrument?.type === 'GOLD'
+                ? '成本价（元/克）'
+                : form.instrument?.type === 'STOCK'
+                  ? '成本价（人民币元/股）'
+                  : '成本价（元/份）'
             }}</text
             ><input
               :value="form.unitCost"

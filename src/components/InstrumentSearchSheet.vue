@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { instrumentLabel } from '../domain/currency'
+import SearchField from './SearchField.vue'
 import BottomSheet from './BottomSheet.vue'
 import { searchInstruments } from '../services/market'
 import type { Instrument } from '../domain/market'
@@ -10,7 +12,7 @@ const emit = defineEmits<{
   select: [item: Instrument]
 }>()
 const query = ref(''),
-  type = ref<'ETF' | 'FUND' | 'GOLD'>('ETF'),
+  type = ref<'ETF' | 'FUND' | 'GOLD' | 'STOCK'>('ETF'),
   results = ref<Instrument[]>([]),
   busy = ref(false),
   searched = ref(false),
@@ -27,7 +29,7 @@ const options = computed(() => [
   ...new Map([...local.value, ...results.value].map((item) => [item.id, item])).values(),
 ])
 /** 切换类别保留检索词，黄金无需远程检索，直接展示内置账户。 */
-function setType(value: 'ETF' | 'FUND' | 'GOLD'): void {
+function setType(value: 'ETF' | 'FUND' | 'GOLD' | 'STOCK'): void {
   type.value = value
   if (value === 'GOLD') query.value = ''
 }
@@ -70,49 +72,52 @@ function select(item: Instrument): void {
   <BottomSheet
     :model-value="modelValue"
     title="选择投资标的"
+    height="82%"
+    contained
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <view class="filters">
-      <button :class="{ active: type === 'ETF' }" @click="setType('ETF')">场内 ETF</button>
-      <button :class="{ active: type === 'FUND' }" @click="setType('FUND')">场外基金</button>
-      <button :class="{ active: type === 'GOLD' }" @click="setType('GOLD')">积存金</button>
+    <view class="instrument-search-controls">
+      <view class="filters">
+        <button :class="{ active: type === 'ETF' }" @click="setType('ETF')">场内 ETF</button>
+        <button :class="{ active: type === 'FUND' }" @click="setType('FUND')">场外基金</button>
+        <button :class="{ active: type === 'STOCK' }" @click="setType('STOCK')">股票</button>
+        <button :class="{ active: type === 'GOLD' }" @click="setType('GOLD')">积存金</button>
+      </view>
+      <SearchField v-if="type !== 'GOLD'" v-model="query" :busy="busy" @search="search" />
     </view>
-    <view v-if="type !== 'GOLD'" class="search-bar">
-      <input
-        v-model="query"
-        class="search-input"
-        placeholder="搜索代码 / 基金名称"
-        maxlength="40"
-        confirm-type="search"
-        @confirm="search"
-      />
-      <button class="small-action" :disabled="busy" @click="search">
-        {{ busy ? '查询中' : '搜索' }}
-      </button>
-    </view>
-    <view v-if="error" class="error">{{ error }}</view>
-    <button
-      v-for="item in options"
-      :key="item.id"
-      class="instrument-option full"
-      :class="{ chosen: item.id === selectedId }"
-      @click="select(item)"
-    >
-      <view
-        ><view class="asset-name">{{ item.name }}</view
-        ><view class="position-code"
-          >{{ item.code }} ·
-          {{ item.type === 'ETF' ? 'ETF' : item.type === 'FUND' ? '场外基金' : '积存金' }}</view
-        ></view
+    <view class="instrument-search-results">
+      <view v-if="error" class="error">{{ error }}</view>
+      <button
+        v-for="item in options"
+        :key="item.id"
+        class="instrument-option full"
+        :class="{ chosen: item.id === selectedId }"
+        @click="select(item)"
       >
-      <text v-if="item.id === selectedId" class="blue">✓</text>
-    </button>
-    <view v-if="!options.length && !busy && !error" class="empty">{{
-      searched ? '没有匹配的标的，试试完整代码' : '输入名称或代码搜索'
-    }}</view>
+        <view
+          ><view class="asset-name">{{ item.name }}</view
+          ><view class="position-code">{{ item.code }} · {{ instrumentLabel(item) }}</view></view
+        >
+        <text v-if="item.id === selectedId" class="blue">✓</text>
+      </button>
+      <view v-if="!options.length && !busy && !error" class="empty">{{
+        searched ? '没有匹配的标的，试试完整代码' : '输入名称或代码搜索'
+      }}</view>
+    </view>
   </BottomSheet>
 </template>
 <style scoped>
+.instrument-search-controls {
+  flex-shrink: 0;
+  padding: 0 22px;
+}
+.instrument-search-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 22px calc(27px + env(safe-area-inset-bottom));
+}
 .instrument-option {
   display: flex;
   align-items: center;

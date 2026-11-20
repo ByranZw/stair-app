@@ -1,3 +1,4 @@
+import { quoteInCny } from '../domain/currency'
 import { maintainOpening, maintainCashFlow } from '../domain/maintenance'
 import { computed, reactive, ref, watch } from 'vue'
 import type {
@@ -263,6 +264,7 @@ export async function pausePlan(id: string, paused: boolean): Promise<void> {
     delete plan.high
     delete plan.signal
     delete plan.lastQuoteDate
+    delete plan.lastFxDate
     delete plan.signalDate
     appendPlanEvent(plan, {
       kind: paused ? 'paused' : 'resumed',
@@ -281,7 +283,8 @@ async function processQuotes(): Promise<void> {
     }
     const derived = projectBook(book)
     book.plans = book.plans.map((plan) => {
-      const quote = watchState.cache[plan.instrumentId]?.quote
+      const original = watchState.cache[plan.instrumentId]?.quote
+      const quote = original && quoteInCny(original)
       if (!quote || watchState.errors[plan.instrumentId]) return plan
       if (
         quote.corporateAction &&
@@ -296,6 +299,8 @@ async function processQuotes(): Promise<void> {
         if (plan.paused && plan.history?.[plan.history.length - 1]?.kind === 'corporate-action')
           return plan
         const next = { ...plan, paused: true, observing: false }
+        delete next.lastQuoteDate
+        delete next.lastFxDate
         delete next.high
         delete next.signal
         delete next.signalDate

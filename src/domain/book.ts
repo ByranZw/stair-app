@@ -32,6 +32,8 @@ export interface Trade {
   price: string
   fee: string
   pendingAmount: string
+  /** 海外实际人民币净支出或净收入；手续费同为人民币。 */
+  settlementAmount?: string
   inputAmount?: string
   /** 黄金最后编辑的换算依据；重新打开更正时沿用。 */
   inputBasis?: '克' | '元'
@@ -69,6 +71,8 @@ export interface Plan {
   observing: boolean
   high?: string
   lastQuoteDate?: string
+  /** 海外人民币策略同时记录所用汇率时间，允许原币报价未变时更新折算。 */
+  lastFxDate?: string
   signal?: 'buy' | 'sell'
   signalDate?: string
   history?: PlanEvent[]
@@ -174,7 +178,16 @@ export interface PlanEvent {
   reason: string
   snapshot: PlanSnapshot
   previous?: PlanSnapshot
-  quote?: { value: string; buyValue?: string; date: string; source: string; kind: 'market' | 'nav' }
+  quote?: {
+    value: string
+    buyValue?: string
+    date: string
+    source: string
+    kind: 'market' | 'nav'
+    currency?: 'CNY' | 'HKD' | 'USD'
+    fxRate?: string
+    fxDate?: string
+  }
   basis?: {
     unitCost?: string
     lastBuy?: string
