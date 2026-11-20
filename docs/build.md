@@ -7,6 +7,8 @@
 - 本地原生包重建脚本另需 Python 3、Java 17、Apktool 3.0.3 和 HBuilderX 安心打包工具。
 
 ```sh
+git clone https://github.com/ByranZw/stair-app.git
+cd stair-app
 npm ci
 npm run dev:h5
 ```

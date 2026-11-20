@@ -1,6 +1,6 @@
 # 版本记录
 
-以下记录已生成的安卓版本，安装包未纳入 Git，也尚未上传 GitHub Releases。
+安卓安装包见 [GitHub Releases](https://github.com/ByranZw/stair-app/releases)。
 
 ## 0.1.8
 
