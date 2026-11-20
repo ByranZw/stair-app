@@ -35,6 +35,7 @@ function title(event: PlanEvent): string {
     trade: '交易与申请',
     restored: '恢复账本',
     'corporate-action': '事件待核对',
+    opening: '初始持仓调整',
   }[event.kind]
 }
 </script>

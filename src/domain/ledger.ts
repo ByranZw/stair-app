@@ -215,7 +215,9 @@ export function validateBook(book: Book): void {
       (o) => o.accountId === trade.accountId && o.instrumentId === trade.instrumentId,
     )
     if (opening && trade.date < opening.date)
-      throw new Error('成交日期早于导入基准，不能重复计算历史持仓')
+      throw new Error(
+        `成交日期早于导入基准：${trade.date} ${book.instruments.find((i) => i.id === trade.instrumentId)!.name}，请将基准日期设在该笔成交之前`,
+      )
     if (trade.planId) {
       const plan = book.plans.find((p) => p.id === trade.planId)
       if (!plan || plan.accountId !== trade.accountId || plan.instrumentId !== trade.instrumentId)
@@ -343,7 +345,10 @@ export function projectBook(book: Book, throughDate?: string): Projection {
     if (event.flow) {
       const f = event.flow
       const value = new D(result.cash[f.accountId])[f.side === 'in' ? 'plus' : 'minus'](f.amount)
-      if (value.lt(0)) throw new Error('转出超过当时可用现金，请核对日期或初始现金')
+      if (value.lt(0))
+        throw new Error(
+          `转出超过当时可用现金：${f.date} 转出 ¥${f.amount}，可用 ¥${result.cash[f.accountId]}`,
+        )
       result.cash[f.accountId] = money(value)
       continue
     }
@@ -429,7 +434,10 @@ export function projectBook(book: Book, throughDate?: string): Projection {
     if (trade.side === 'buy') {
       const net = gross.plus(fee),
         cash = new D(result.cash[trade.accountId]).minus(net)
-      if (cash.lt(0)) throw new Error('买入超过成交当时现金，请先补录实际转入或核对初始现金')
+      if (cash.lt(0))
+        throw new Error(
+          `买入超过成交当时现金：${trade.date} ${book.instruments.find((i) => i.id === trade.instrumentId)!.name}，需 ¥${money(net)}，可用 ¥${result.cash[trade.accountId]}`,
+        )
       result.cash[trade.accountId] = money(cash)
       position.qty = new D(position.qty).plus(qty).toString()
       position.totalCost = new D(position.totalCost).plus(net).toString()
@@ -440,7 +448,10 @@ export function projectBook(book: Book, throughDate?: string): Projection {
         plan.lastBuy = trade.price
       }
     } else {
-      if (qty.gt(position.qty)) throw new Error('卖出数量超过成交当时持仓，请核对日期和顺序')
+      if (qty.gt(position.qty))
+        throw new Error(
+          `卖出数量超过成交当时持仓：${trade.date} ${book.instruments.find((i) => i.id === trade.instrumentId)!.name}，卖出 ${qty}，可用 ${position.qty}`,
+        )
       const unitCostBefore = position.unitCost
       const cost = qty.eq(position.qty)
         ? new D(position.totalCost)

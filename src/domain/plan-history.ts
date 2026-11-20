@@ -122,6 +122,7 @@ export function validatePlanHistory(plan: Plan): void {
         'trade',
         'restored',
         'corporate-action',
+        'opening',
       ].includes(event.kind) ||
       typeof event.reason !== 'string' ||
       !event.reason ||

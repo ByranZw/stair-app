@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import SelectionSheet from '../../components/SelectionSheet.vue'
+import PageOverlays from '../../components/PageOverlays.vue'
 import { usePageSelection } from '../../composables/useSelection'
 usePageSelection(true)
+import { usePageDialog } from '../../composables/useDialog'
 import { usePageSheetBack } from '../../composables/useSheetBack'
 usePageSheetBack()
+usePageDialog(true)
 import { computed, ref } from 'vue'
 import { refreshAll, watchState } from '../../state/watchlist'
 import { bookState, selectedAccountId, projection } from '../../state/book'
@@ -288,7 +290,7 @@ function openWatchlist(): void {
       </button>
     </template>
     <BookActions ref="actions" tab-page /><AppToast />
-    <SelectionSheet />
+    <PageOverlays />
   </view>
 </template>
 

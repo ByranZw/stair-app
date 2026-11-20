@@ -7,8 +7,9 @@ const props = defineProps<{
   title: string
   tabPage?: boolean
   contained?: boolean
+  variant?: 'sheet' | 'dialog'
 }>()
-const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
+const emit = defineEmits<{ 'update:modelValue': [value: boolean]; closed: [] }>()
 const rendered = ref(false),
   leaving = ref(false)
 let preparing = false,
@@ -34,7 +35,7 @@ function restoreTabBar() {
 }
 /** 等待原生导航隐藏后再挂载，避免浮层出现时导航还压在上面。 */
 function open() {
-  if (preparing || rendered.value || disposed) return
+  if (!props.modelValue || preparing || rendered.value || disposed) return
   preparing = true
   if (props.tabPage) {
     tabHidden = true
@@ -58,6 +59,7 @@ function show() {
   if (disposed || !props.modelValue) {
     unregisterBack()
     restoreTabBar()
+    emit('closed')
     return
   }
   leaving.value = false
@@ -74,6 +76,7 @@ function afterAnimation() {
   } else {
     unregisterBack()
     restoreTabBar()
+    emit('closed')
   }
 }
 watch(
@@ -81,14 +84,18 @@ watch(
   (visible) => {
     if (visible) {
       if (!releaseBack) releaseBack = backStack?.register(close)
-      open()
+      // 等本轮属性更新完成再读取Tab归属，避免动态选择面板先开后隐藏导航。
+      nextTick(open)
     } else if (rendered.value && !leaving.value) {
       leaving.value = true
       // App-vue不转发CSS animationend；220ms退场后留一帧再恢复原生导航。
       nextTick(() => {
         leaveTimer = setTimeout(afterAnimation, 240)
       })
-    } else if (!preparing && !rendered.value) unregisterBack()
+    } else if (!preparing && !rendered.value) {
+      unregisterBack()
+      emit('closed')
+    }
   },
   { immediate: true, flush: 'sync' },
 )
@@ -112,11 +119,20 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <view v-if="rendered" class="overlay" :class="{ 'sheet-leaving': leaving }">
+  <view
+    v-if="rendered"
+    class="overlay"
+    :class="{ 'sheet-leaving': leaving, 'dialog-overlay': variant === 'dialog' }"
+  >
     <view class="sheet-mask" @click="close" />
-    <view class="sheet" role="dialog" aria-modal="true" :aria-label="title">
+    <view
+      class="sheet"
+      :role="variant === 'dialog' ? 'alertdialog' : 'dialog'"
+      aria-modal="true"
+      :aria-label="title"
+    >
       <view class="sheet-header">
-        <view class="handle" /><view class="sheet-head"
+        <view v-if="variant !== 'dialog'" class="handle" /><view class="sheet-head"
           ><view class="sheet-title">{{ title }}</view
           ><button class="close" aria-label="关闭" @click="close">×</button></view
         >

@@ -69,7 +69,7 @@ function remove(): void {
       class="swipe-delete"
       :disabled="offset !== -width || dragging"
       :tabindex="offset === -width ? 0 : -1"
-      aria-label="删除这笔交易记录"
+      aria-label="删除这条记录"
       @click.stop="remove"
     >
       删除
@@ -96,6 +96,7 @@ function remove(): void {
 .swipe-record-content {
   position: relative;
   z-index: 1;
+  border-radius: 0;
   width: 100%;
   box-sizing: border-box;
   margin: 0;

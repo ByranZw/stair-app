@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import SelectionSheet from '../../components/SelectionSheet.vue'
+import PageOverlays from '../../components/PageOverlays.vue'
 import { usePageSelection } from '../../composables/useSelection'
 usePageSelection(true)
+import { usePageDialog } from '../../composables/useDialog'
 import { usePageSheetBack } from '../../composables/useSheetBack'
 usePageSheetBack()
+usePageDialog(true)
 import { ref } from 'vue'
 import { diagnoseGold } from '../../services/market'
 import BottomSheet from '../../components/BottomSheet.vue'
+import DataMaintenance from '../../components/DataMaintenance.vue'
 import BookActions from '../../components/BookActions.vue'
 import AppToast from '../../components/AppToast.vue'
 import BackupPanel from '../../components/BackupPanel.vue'
 import { bookState } from '../../state/book'
+const maintenance = ref<InstanceType<typeof DataMaintenance>>()
 const actions = ref<InstanceType<typeof BookActions>>()
 const sheet = ref(false),
   section = ref(''),
@@ -55,14 +59,16 @@ async function checkGold() {
       </button></view
     >
     <view class="card"
+      ><button class="setting-row" @click="maintenance?.open()">
+        <text>数据管理</text><text class="muted">初始持仓 / 资金流水 ›</text></button
       ><button class="setting-row" @click="open('数据备份')">
         <text>数据备份与恢复</text><text class="muted">本地文件 ›</text></button
       ><button class="setting-row" @click="open('行情与数据来源')">
         <text>行情与数据来源</text><text class="muted">免费来源 ›</text>
       </button></view
     >
-    <view class="version-note">拾阶 STAIR · 0.1.9</view>
-    <BookActions ref="actions" tab-page /><AppToast />
+    <view class="version-note">拾阶 STAIR · 0.1.10</view>
+    <BookActions ref="actions" tab-page /><DataMaintenance ref="maintenance" tab-page /><AppToast />
     <BottomSheet v-model="sheet" :title="section" tab-page :contained="section === '数据备份'">
       <template v-if="section === '默认投资策略'"
         ><view class="metric-grid"
@@ -99,6 +105,6 @@ async function checkGold() {
       >
       <BackupPanel v-else-if="section === '数据备份'" />
     </BottomSheet>
-    <SelectionSheet />
+    <PageOverlays />
   </view>
 </template>

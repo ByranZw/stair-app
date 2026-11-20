@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import AppPicker from '../../components/AppPicker.vue'
-import SelectionSheet from '../../components/SelectionSheet.vue'
+import PageOverlays from '../../components/PageOverlays.vue'
 import { usePageSelection } from '../../composables/useSelection'
 usePageSelection(true)
+import { usePageDialog } from '../../composables/useDialog'
 import { usePageSheetBack } from '../../composables/useSheetBack'
 usePageSheetBack()
+usePageDialog(true)
 import { computed, ref } from 'vue'
 import { bookState, projection, selectedAccountId } from '../../state/book'
 import { D, formatMoney } from '../../domain/money'
@@ -244,7 +246,7 @@ function outcome(plan: Plan) {
           ><text class="metric-value">{{ rule[1] }}</text></view
         ></view
       ></view
-    ><BookActions ref="actions" tab-page /><AppToast /><SelectionSheet />
+    ><BookActions ref="actions" tab-page /><AppToast /><PageOverlays />
   </view>
 </template>
 

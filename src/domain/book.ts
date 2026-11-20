@@ -170,6 +170,7 @@ export interface PlanEvent {
     | 'trade'
     | 'restored'
     | 'corporate-action'
+    | 'opening'
   reason: string
   snapshot: PlanSnapshot
   previous?: PlanSnapshot

@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { formatDateTime } from '../domain/display-time'
 import AppPicker from './AppPicker.vue'
+import InstrumentSearchSheet from './InstrumentSearchSheet.vue'
 import { computed, reactive, ref, onBeforeUnmount, watch } from 'vue'
+import DataMaintenance from './DataMaintenance.vue'
 import BottomSheet from './BottomSheet.vue'
 import SwipeRecord from './SwipeRecord.vue'
 import { saveFormDraft, readFormDraft, clearFormDraft } from '../state/form-drafts'
 import { usePickerGuard } from '../composables/usePickerGuard'
+const dialog = useDialog()
 const { pickerSettling, settlePicker } = usePickerGuard()
 import {
   bookState,
@@ -23,16 +26,20 @@ import {
   cancelPending,
   newId,
 } from '../state/book'
-import { watchState } from '../state/watchlist'
+import { watchState, addInstrument } from '../state/watchlist'
 import type { Instrument } from '../domain/market'
 import type { Account, Plan, Trade } from '../domain/book'
 import { positionKey } from '../domain/book'
 import { D, today, formatMoney } from '../domain/money'
 import { summarizeCapital } from '../domain/capital'
 import { convertGold } from '../domain/gold-entry'
+import { openingCost } from '../domain/opening-cost'
+import { useDialog } from '../composables/useDialog'
 import { showToast } from '../state/feedback'
+const maintenance = ref<InstanceType<typeof DataMaintenance>>()
 const props = defineProps<{ tabPage?: boolean }>()
 const visible = ref(false),
+  selectingInstrument = ref(false),
   mode = ref(''),
   error = ref(''),
   saving = ref(false),
@@ -52,6 +59,10 @@ const form = reactive({
   price: '',
   fee: '0',
   totalCost: '',
+  importCost: '',
+  importUnitCost: '',
+  importCostMode: 'unit' as 'unit' | 'total',
+  importInstrument: undefined as Instrument | undefined,
   side: 'buy',
   status: 'confirmed',
   pendingAmount: '',
@@ -125,7 +136,34 @@ const items = computed(() => [
     [...watchState.items, ...bookState.data.instruments, gold].map((i) => [i.id, i]),
   ).values(),
 ])
-const instrument = computed(() => items.value.find((i) => i.id === form.instrumentId))
+const instrument = computed(
+  () =>
+    (mode.value === 'import' && form.importInstrument?.id === form.instrumentId
+      ? form.importInstrument
+      : undefined) || items.value.find((i) => i.id === form.instrumentId),
+)
+/** 最近编辑的成本字段作为依据，数量变化只更新另一字段，不反复把取整结果倒算回输入。 */
+function syncImportCost(): void {
+  if (mode.value !== 'import') return
+  try {
+    const result = openingCost(form.qty, form.importCost, form.importCostMode)
+    if (form.importCostMode === 'unit') form.totalCost = result.totalCost
+    else form.importUnitCost = result.unitCost
+  } catch {
+    if (form.importCostMode === 'unit') form.totalCost = ''
+    else form.importUnitCost = ''
+  }
+}
+/** 只响应用户编辑，自动回填不改变计算依据；输入未完成时清空对应换算结果。 */
+function setImportCost(event: Event, basis: 'unit' | 'total'): void {
+  const value = (event as unknown as { detail: { value: string } }).detail.value
+  form.importCostMode = basis
+  form.importCost = value
+  if (basis === 'unit') form.importUnitCost = value
+  else form.totalCost = value
+  syncImportCost()
+}
+watch(() => [form.qty, form.importCost, form.importCostMode, mode.value], syncImportCost)
 const accounts = computed(() => bookState.data.accounts)
 const linkedPlans = computed(() =>
   bookState.data.plans.filter(
@@ -265,6 +303,11 @@ function open(
     const draft = readFormDraft<EntryDraft>(draftKey)
     if (draft) {
       Object.assign(form, draft.form)
+      form.importInstrument = draft.form.importInstrument
+      form.importCostMode = draft.form.importCostMode || 'total'
+      form.importCost = draft.form.importCost ?? draft.form.totalCost ?? ''
+      form.importUnitCost =
+        draft.form.importUnitCost || (form.importCostMode === 'unit' ? form.importCost : '')
       // 旧版缺少编辑基准的草稿保持失效身份，关闭重开也不授予覆盖账户的权限。
       accountBaseline.value = draft.accountBaseline || null
       tradeId.value = draft.tradeId
@@ -289,13 +332,17 @@ function open(
   tradeId.value = newId('trade')
   Object.assign(form, {
     accountId: selectedAccountId.value || accounts.value[0]?.id || '',
-    instrumentId: itemId || items.value[0]?.id || '',
+    instrumentId: itemId || (next === 'import' ? '' : items.value[0]?.id || ''),
     date: today(),
     time: '',
     qty: '',
     price: '',
     fee: '0',
     totalCost: '',
+    importCost: '',
+    importUnitCost: '',
+    importCostMode: 'unit',
+    importInstrument: undefined,
     side,
     status: 'confirmed',
     pendingAmount: '',
@@ -352,13 +399,24 @@ function selectAccount(event: { detail: { value: string | number } }): void {
 /** 标的从自选或历史账本选择，真实成交值仍由用户确认。 */
 function selectItem(event: { detail: { value: string | number } }): void {
   settlePicker()
-  form.instrumentId = items.value[Number(event.detail.value)].id
+  chooseInstrument(items.value[Number(event.detail.value)])
+}
+/** 远程检索身份只留在当前表单与草稿；切换品种时清除旧数量和成本。 */
+function chooseInstrument(item: Instrument): void {
+  if (form.instrumentId === item.id) return
+  if (mode.value === 'import') form.importInstrument = item
+  form.instrumentId = item.id
   form.planId = linkedPlans.value[0]?.id || ''
   form.status = 'confirmed'
   form.qty = ''
   form.price = ''
   form.goldAmount = ''
   form.goldMode = '克'
+  if (mode.value === 'import') {
+    form.importCost = ''
+    form.importUnitCost = ''
+    form.totalCost = ''
+  }
   fillGoldPrice()
 }
 /** 新录入的黄金只预填新鲜的对应客户侧报价，成交仍须用户按确认单核对。 */
@@ -521,6 +579,7 @@ async function submit(): Promise<void> {
   if (saving.value || pickerSettling.value) return
   saving.value = true
   error.value = ''
+  let savedMessage = '已保存'
   try {
     if (!bookState.ready) throw new Error(bookState.error || '账本正在读取，请稍后')
     if (mode.value === 'account') await createAccount(form.name, form.cash, form.date)
@@ -539,18 +598,26 @@ async function submit(): Promise<void> {
         amount: form.cash,
         side: form.side === 'sell' ? 'out' : 'in',
       })
-    else if (mode.value === 'import')
+    else if (mode.value === 'import') {
+      const selected = instrument.value
+      if (!selected) throw new Error('请选择投资标的')
       await importPosition(
         {
           accountId: form.accountId,
           instrumentId: form.instrumentId,
           date: form.date,
           qty: form.qty,
-          totalCost: form.totalCost,
+          totalCost: openingCost(form.qty, form.importCost, form.importCostMode).totalCost,
         },
-        instrument.value!,
+        selected,
       )
-    else if (mode.value === 'plan') {
+      // 账本已提交后才加关注；关注存储失败不能把已保存持仓留在可重复提交状态。
+      try {
+        addInstrument(selected)
+      } catch {
+        savedMessage = '持仓已保存，自选添加失败'
+      }
+    } else if (mode.value === 'plan') {
       const plan: Omit<Plan, 'version' | 'createdAt' | 'paused' | 'observing'> = {
         id: editingPlanId.value || newId('plan'),
         accountId: form.accountId,
@@ -591,7 +658,7 @@ async function submit(): Promise<void> {
     clearFormDraft(draftKey)
     draftKey = ''
     visible.value = false
-    showToast('已保存')
+    showToast(savedMessage)
   } catch (e) {
     error.value = e instanceof Error ? e.message : '保存失败，请保留输入'
   } finally {
@@ -622,32 +689,30 @@ async function removeRecord(id: string): Promise<void> {
   const row = bookState.data.trades.find((t) => t.id === id)
   if (!row || saving.value) return
   const revision = bookState.data.revision
-  uni.showModal({
-    title: '删除这笔记录？',
-    content: `${itemName(row.instrumentId)} · ${labelTrade(row)}\n${row.date} ${row.time || ''} · ${accountName(row.accountId)}\n${row.qty || '待确认'} ${items.value.find((i) => i.id === row.instrumentId)?.type === 'GOLD' ? '克' : '份'} · ${tradeAmount(row)}\n删除后将更新余额和持仓。`,
-    confirmText: '删除',
-    confirmColor: '#d94d58',
-    success: async (result) => {
-      if (!result.confirm) return
-      saving.value = true
-      try {
-        await deleteSavedTrade(id, revision)
-        if (detailId.value === id) {
-          mode.value = 'records'
-          detailId.value = ''
-        }
-        showToast('已删除')
-      } catch (e) {
-        uni.showModal({
-          title: '未能删除',
-          content: e instanceof Error ? e.message : '删除失败，原账本未改变',
-          showCancel: false,
-        })
-      } finally {
-        saving.value = false
-      }
-    },
-  })
+  saving.value = true
+  try {
+    const confirmed = await dialog.confirm({
+      title: '删除这笔记录？',
+      detail: `${itemName(row.instrumentId)} · ${labelTrade(row)}\n${row.date} ${row.time || ''} · ${accountName(row.accountId)}\n${row.qty || '待确认'} ${items.value.find((i) => i.id === row.instrumentId)?.type === 'GOLD' ? '克' : '份'} · ${tradeAmount(row)}`,
+      confirmText: '删除',
+      destructive: true,
+    })
+    if (!confirmed) return
+    await deleteSavedTrade(id, revision)
+    if (detailId.value === id) {
+      mode.value = 'records'
+      detailId.value = ''
+    }
+    showToast('已删除')
+  } catch (cause) {
+    await dialog.confirm({
+      title: '未能删除',
+      message: cause instanceof Error ? cause.message : '删除失败',
+      alert: true,
+    })
+  } finally {
+    saving.value = false
+  }
 }
 defineExpose({ open, showRecord, removeRecord })
 </script>
@@ -904,7 +969,16 @@ defineExpose({ open, showRecord, removeRecord })
             ></view
           >
           <view v-if="mode !== 'cash'" class="field"
-            >投资标的<AppPicker
+            >投资标的<button
+              v-if="mode === 'import'"
+              class="form-select full import-instrument"
+              @click="selectingInstrument = true"
+            >
+              {{
+                instrument ? instrument.name + ' · ' + instrument.code : '搜索或选择投资标的'
+              }}</button
+            ><AppPicker
+              v-else
               title="投资标的"
               :value="items.findIndex((i) => i.id === form.instrumentId)"
               :range="items"
@@ -941,9 +1015,19 @@ defineExpose({ open, showRecord, removeRecord })
           ><label class="field"
             >{{ instrument?.type === 'GOLD' ? '持有克重' : '持有份额'
             }}<input v-model="form.qty" type="digit" /></label
-          ><label class="field"
-            >持仓总成本（元，含历史费用）<input v-model="form.totalCost" type="digit" /></label
-          ><view class="tip">导入持仓不扣现金。</view></template
+          ><label class="field">
+            {{ instrument?.type === 'GOLD' ? '持仓成本价（元/克）' : '持仓成本价（元/份）' }}
+            <input
+              :value="form.importUnitCost"
+              type="digit"
+              @input="setImportCost($event, 'unit')"
+            />
+          </label>
+          <label class="field"
+            >持仓总成本（元）
+            <input :value="form.totalCost" type="digit" @input="setImportCost($event, 'total')" />
+          </label>
+          <view class="tip">导入持仓不扣现金。</view></template
         >
         <template v-if="mode === 'trade'">
           <view class="chips"
@@ -1089,7 +1173,13 @@ defineExpose({ open, showRecord, removeRecord })
       <template v-if="mode === 'accounts'">
         <button class="primary full" @click="open('account')">＋ 新建账户</button
         ><button v-if="accounts.length" class="secondary full" @click="open('cash')">
-          记录现金转入 / 转出
+          记录现金转入 / 转出</button
+        ><button
+          v-if="accounts.length"
+          class="maintenance-link full"
+          @click="maintenance?.open('cash', selectedAccountId)"
+        >
+          资金流水 ›
         </button>
       </template>
       <template v-else-if="mode === 'funding'">
@@ -1134,6 +1224,13 @@ defineExpose({ open, showRecord, removeRecord })
       </template>
     </template>
   </BottomSheet>
+  <DataMaintenance ref="maintenance" />
+  <InstrumentSearchSheet
+    v-model="selectingInstrument"
+    :items="items"
+    :selected-id="form.instrumentId"
+    @select="chooseInstrument"
+  />
 </template>
 
 <style scoped>
@@ -1179,6 +1276,11 @@ defineExpose({ open, showRecord, removeRecord })
 </style>
 
 <style scoped>
+.import-instrument {
+  text-align: left;
+  line-height: 1.5;
+  white-space: normal;
+}
 .order-confirmation {
   display: flex;
   align-items: center;
@@ -1189,5 +1291,15 @@ defineExpose({ open, showRecord, removeRecord })
   color: #986025;
   font-size: 13px;
   line-height: 1.6;
+}
+</style>
+
+<style scoped>
+.maintenance-link {
+  background: transparent;
+  color: #71809b;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px;
 }
 </style>

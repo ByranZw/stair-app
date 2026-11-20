@@ -7,8 +7,10 @@ import { projectBook } from '../domain/ledger'
 import { D, formatMoney } from '../domain/money'
 import { bookState, exportBook, restoreBook, readRecoveryBackup } from '../state/book'
 import { chooseBackupFile, saveBackupFile } from '../services/backup-file'
+import { useDialog } from '../composables/useDialog'
 import { showToast } from '../state/feedback'
 import { saveFormDraft, readFormDraft, clearFormDraft } from '../state/form-drafts'
+const dialog = useDialog()
 const busy = ref(false),
   error = ref(''),
   message = ref(''),
@@ -104,15 +106,12 @@ function reinspect(): void {
 async function confirmRestore(): Promise<void> {
   if (busy.value || !preview.value || changed.value) return
   busy.value = true
-  const replace = await new Promise<boolean>((resolve) =>
-    uni.showModal({
-      title: '替换当前账本？',
-      content: '将用这份备份替换全部账户和记录，当前账本会保留一份副本。',
-      confirmText: '替换并恢复',
-      success: (result) => resolve(result.confirm),
-      fail: () => resolve(false),
-    }),
-  )
+  const replace = await dialog.confirm({
+    title: '替换当前账本？',
+    message: '将用这份备份替换全部账户和记录。',
+    detail: '当前账本会保存为操作前副本。',
+    confirmText: '替换并恢复',
+  })
   if (!replace) {
     busy.value = false
     return

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import AppPicker from '../../components/AppPicker.vue'
-import SelectionSheet from '../../components/SelectionSheet.vue'
+import PageOverlays from '../../components/PageOverlays.vue'
 import { usePageSelection } from '../../composables/useSelection'
 usePageSelection()
+import { usePageDialog } from '../../composables/useDialog'
 import { usePageSheetBack } from '../../composables/useSheetBack'
 usePageSheetBack()
+usePageDialog()
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { appVisible } from '../../state/app-visibility'
@@ -27,11 +29,18 @@ import CorporateActions from '../../components/CorporateActions.vue'
 import AppToast from '../../components/AppToast.vue'
 import { showToast } from '../../state/feedback'
 import AppIcon from '../../components/AppIcon.vue'
+import DataMaintenance from '../../components/DataMaintenance.vue'
 import BookActions from '../../components/BookActions.vue'
 import SwipeRecord from '../../components/SwipeRecord.vue'
 import { bookState, projection, selectedAccountId, initializeBook } from '../../state/book'
 import { positionKey } from '../../domain/book'
 import { D, formatMoney } from '../../domain/money'
+const maintenance = ref<InstanceType<typeof DataMaintenance>>()
+const opening = computed(() =>
+  bookState.data.openings.find(
+    (row) => row.accountId === accountId.value && row.instrumentId === id.value,
+  ),
+)
 const id = ref(''),
   pageVisible = ref(false),
   chartClock = ref(new Date()),
@@ -523,6 +532,9 @@ function editPlan(): void {
           ></view
         ></view
       >
+      <button v-if="opening" class="setting-row full" @click="maintenance?.editOpening(opening.id)">
+        <text>管理初始持仓</text><text class="muted">修改 / 删除 ›</text>
+      </button>
     </view>
     <button v-if="!plan" class="secondary full create-plan" @click="editPlan">创建投资计划</button>
     <CorporateActions
@@ -574,7 +586,7 @@ function editPlan(): void {
       ><button class="primary" @click="trade('buy')">记录买入</button></view
     >
     <AppToast />
-    <BookActions ref="actions" /><SelectionSheet /> </view
+    <BookActions ref="actions" /><DataMaintenance ref="maintenance" /><PageOverlays /> </view
   ><view v-else class="screen empty">该标的尚未加入自选或账本，请返回重新选择。 </view>
 </template>
 <style scoped>

@@ -1,3 +1,4 @@
+import { maintainOpening, maintainCashFlow } from '../domain/maintenance'
 import { computed, reactive, ref, watch } from 'vue'
 import type {
   Account,
@@ -356,4 +357,45 @@ export async function readRecoveryBackup(): Promise<
   return recovery
     ? { createdAt: recovery.createdAt, text: createBackup(recovery.book, recovery.createdAt) }
     : undefined
+}
+
+/** 初始持仓修改及重算同事务保存，并保留操作前的恢复副本。 */
+export async function saveOpeningCorrection(
+  id: string,
+  input: Omit<OpeningPosition, 'id'>,
+  instrument: Instrument,
+  baseline: OpeningPosition,
+): Promise<void> {
+  await updateBook(
+    (book) => {
+      retainInstrument(book, instrument)
+      return maintainOpening(book, id, input, baseline)
+    },
+    { expectedRevision: bookState.data.revision, saveRecovery: true },
+  )
+}
+/** 删除初始持仓只移除基准记录，不连带删除后续交易。 */
+export async function deleteSavedOpening(id: string, expectedRevision: number): Promise<void> {
+  await updateBook((book) => maintainOpening(book, id, null), {
+    expectedRevision,
+    saveRecovery: true,
+  })
+}
+/** 更正资金流水后重新计算历史现金、资产与计划预留。 */
+export async function saveCashFlowCorrection(
+  id: string,
+  input: Omit<CashFlow, 'id' | 'sequence'>,
+  baseline: CashFlow,
+): Promise<void> {
+  await updateBook((book) => maintainCashFlow(book, id, input, baseline), {
+    expectedRevision: bookState.data.revision,
+    saveRecovery: true,
+  })
+}
+/** 删除资金流水同样检查后续资金是否足够，失败保留原账本。 */
+export async function deleteSavedCashFlow(id: string, expectedRevision: number): Promise<void> {
+  await updateBook((book) => maintainCashFlow(book, id, null), {
+    expectedRevision,
+    saveRecovery: true,
+  })
 }

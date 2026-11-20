@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import SelectionSheet from '../../components/SelectionSheet.vue'
+import PageOverlays from '../../components/PageOverlays.vue'
 import { usePageSelection } from '../../composables/useSelection'
 usePageSelection(true)
+import { usePageDialog } from '../../composables/useDialog'
 import { usePageSheetBack } from '../../composables/useSheetBack'
 usePageSheetBack()
-import { computed, ref, watch } from 'vue'
+const dialog = usePageDialog(true)
+import { computed, ref } from 'vue'
 import { onShow, onHide } from '@dcloudio/uni-app'
 import { watchState, addInstrument, removeInstrument, refreshAll } from '../../state/watchlist'
 import { searchInstruments } from '../../services/market'
@@ -23,8 +25,7 @@ const searching = ref(false),
   error = ref(''),
   filter = ref('全部'),
   pressed = ref(''),
-  removing = ref(false),
-  removalItem = ref<Instrument>()
+  removing = ref(false)
 const visible = computed(() =>
   watchState.items.filter(
     (item) =>
@@ -36,13 +37,7 @@ const visible = computed(() =>
 )
 let searchVersion = 0
 let suppressClickUntil = 0
-// 所有关闭入口都消除按压态并屏蔽松手尾部点击，不把取消移除当成打开详情。
-watch(removing, (visible) => {
-  if (!visible) {
-    pressed.value = ''
-    suppressClickUntil = Date.now() + 350
-  }
-})
+
 const chartVisible = ref(true)
 // Tab保留页面实例；隐藏时停止Canvas测量，避免用详情页上下文查询迷你图。
 onShow(() => {
@@ -92,19 +87,25 @@ function detail(id: string) {
   uni.navigateTo({ url: `/pages/detail/index?id=${encodeURIComponent(id)}` })
 }
 /** 长按只展示当前标的的管理操作，不直接删除或同时打开详情。 */
-function remove(item: Instrument): void {
-  removalItem.value = item
+async function remove(item: Instrument): Promise<void> {
+  if (removing.value) return
   removing.value = true
-}
-/** 明确点击才移除本地关注，保存失败保留操作面板供重试。 */
-function confirmRemove(): void {
-  if (!removalItem.value) return
+  pressed.value = ''
   try {
-    removeInstrument(removalItem.value.id)
-    removing.value = false
+    const confirmed = await dialog.confirm({
+      title: '移除自选？',
+      detail: `${item.name} · ${item.code}`,
+      confirmText: '移除',
+      destructive: true,
+    })
+    if (!confirmed) return
+    removeInstrument(item.id)
     showToast('已移除自选')
   } catch {
     showToast('移除失败，请重试')
+  } finally {
+    removing.value = false
+    suppressClickUntil = Date.now() + 350
   }
 }
 /** 来源前值仅用于行情涨跌显示，不作为账户收益。 */
@@ -260,20 +261,6 @@ function quote(id: string): string {
         >没有匹配的标的，可试试完整代码。</view
       >
     </BottomSheet>
-    <BottomSheet v-model="removing" :title="removalItem?.name || '自选管理'" tab-page>
-      <button class="watch-remove full" @click="confirmRemove">移除自选</button>
-    </BottomSheet>
-    <SelectionSheet />
+    <PageOverlays />
   </view>
 </template>
-<style scoped>
-.watch-remove {
-  min-height: 50px;
-  padding: 14px;
-  border-radius: 14px;
-  background: #fff0f1;
-  color: #ce4653;
-  font-size: 16px;
-  font-weight: 600;
-}
-</style>
