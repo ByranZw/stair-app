@@ -61,7 +61,7 @@ async function checkGold() {
         <text>行情与数据来源</text><text class="muted">免费来源 ›</text>
       </button></view
     >
-    <view class="version-note">拾阶 STAIR · 0.1.8</view>
+    <view class="version-note">拾阶 STAIR · 0.1.9</view>
     <BookActions ref="actions" tab-page /><AppToast />
     <BottomSheet v-model="sheet" :title="section" tab-page :contained="section === '数据备份'">
       <template v-if="section === '默认投资策略'"

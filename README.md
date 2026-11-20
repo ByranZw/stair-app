@@ -8,9 +8,9 @@
 
 ## 下载安装
 
-当前版本 **v0.1.8**，支持 **ARM64 安卓设备，Android 5.0 及以上**。
+当前版本 **v0.1.9**，支持 **ARM64 安卓设备，Android 5.0 及以上**。
 
-[下载 stair-0.1.8-arm64.apk](https://github.com/ByranZw/stair-app/releases/download/v0.1.8/stair-0.1.8-arm64.apk)
+[下载 stair-0.1.9-arm64.apk](https://github.com/ByranZw/stair-app/releases/download/v0.1.9/stair-0.1.9-arm64.apk)
 
 首次安装后，先创建账户，再添加自选、投资计划和实际交易。更新时可直接覆盖安装；更换设备或卸载应用前，请先导出账本备份。
 

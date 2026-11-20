@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { parseSgeDaily, parseSgeMinute } from '../src/services/sge-history'
 import type { Instrument } from '../src/domain/market'
 const gold: Instrument = {
@@ -8,6 +9,44 @@ const gold: Instrument = {
   name: '招行黄金账户',
   type: 'GOLD',
 }
+
+test('收盘真实响应的now和发布时间均超出末刻度时，显示当日完整曲线', () => {
+  const raw = JSON.parse(
+    readFileSync(new URL('./fixtures/sge-minute-close.json', import.meta.url), 'utf8'),
+  )
+  const history = parseSgeMinute(raw, gold, new Date('2026-11-20T17:00:00+08:00'))
+  assert.equal(raw.now, '16:57')
+  assert.equal(raw.delaystr, '2026年11月20日 15:45:00')
+  assert.equal(history.points.at(-1)?.date, '2026-11-20 15:30')
+  assert.equal(history.points.at(-1)?.value, String(raw.data.at(-1)))
+  assert.throws(() => parseSgeMinute(raw, gold, new Date('2026-11-21T17:00:00+08:00')), /交易日/)
+})
+
+test('休市间隙按较早有效刻度截断，保留夜盘到日盘的顺序', () => {
+  const raw = {
+    heyue: 'Au99.99',
+    times: ['20:00', '23:59', '00:00', '02:30', '09:00', '11:30', '13:30', '15:30'],
+    data: ['800', '801', '802', '803', '804', '805', '806', '807'],
+    now: '12:05',
+    delaystr: '2026年11月20日 11:45:00',
+  }
+  assert.equal(
+    parseSgeMinute(raw, gold, new Date('2026-11-20T12:06:00+08:00')).points.at(-1)?.date,
+    '2026-11-20 11:30',
+  )
+  const night = parseSgeMinute(
+    { ...raw, now: '00:01', delaystr: '2026年11月20日 23:59:00' },
+    gold,
+    new Date('2026-11-19T23:59:30+08:00'),
+  )
+  assert.equal(night.points.at(-1)?.date, '2026-11-19 23:59')
+  assert.throws(() => parseSgeMinute({ ...raw, now: '25:00' }, gold), /截止时间/)
+  assert.throws(
+    () => parseSgeMinute({ ...raw, delaystr: '2026年11月20日 12:60:00' }, gold),
+    /发布时间/,
+  )
+  assert.throws(() => parseSgeMinute(raw, gold, new Date('2026-11-20T10:00:00+08:00')), /交易日/)
+})
 
 test('上金所历史按官方开收低高顺序解析，不生成银行报价', () => {
   const history = parseSgeDaily({ time: [['2026-11-19', 810, 801.93, 793.44, 816]] }, gold)

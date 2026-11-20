@@ -10,6 +10,7 @@ import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { appVisible } from '../../state/app-visibility'
 import { createVisiblePoller } from '../../services/visible-poller'
 import { goldToday, goldSampleChanges } from '../../domain/gold-history'
+import { sgeSessionLabel, sgeMinutePoints } from '../../domain/sge-session'
 import {
   watchState,
   refreshInstrument,
@@ -33,6 +34,7 @@ import { positionKey } from '../../domain/book'
 import { D, formatMoney } from '../../domain/money'
 const id = ref(''),
   pageVisible = ref(false),
+  chartClock = ref(new Date()),
   today = ref(goldToday()),
   sampleLimit = ref(10),
   chartVisible = ref(true),
@@ -59,6 +61,7 @@ const marketReference = computed(() => item.value?.type === 'GOLD')
 const chartHistory = computed(() => cached.value?.history)
 const chartMinute = computed(() => cached.value?.minute)
 const goldPoller = createVisiblePoller(async () => {
+  chartClock.value = new Date()
   today.value = goldToday()
   if (item.value?.type === 'GOLD') {
     await refreshInstrument(item.value)
@@ -92,9 +95,7 @@ const dailyPoints = computed(() => {
 const points = computed(() => {
   if (chartMode.value === 'minute') {
     const minutes = chartMinute.value?.points || []
-    return item.value?.type === 'GOLD'
-      ? minutes.filter((point) => point.date.slice(0, 10) === today.value)
-      : minutes
+    return item.value?.type === 'GOLD' ? sgeMinutePoints(minutes, chartClock.value) : minutes
   }
   if (chartMode.value === 'line') return dailyPoints.value
   return aggregateCandles(
@@ -422,9 +423,9 @@ function editPlan(): void {
       ><view v-if="watchState.errors[id + '/history'] && chartMode !== 'minute'" class="error"
         >{{ watchState.errors[id + '/history'] }}{{ points.length ? ' · 当前显示缓存' : '' }}</view
       >
-      <view v-if="item.type === 'GOLD' && chartMode === 'minute'" class="gold-coverage"
-        >延时行情</view
-      >
+      <view v-if="item.type === 'GOLD' && chartMode === 'minute'" class="gold-coverage">{{
+        sgeSessionLabel(chartClock)
+      }}</view>
       <button
         class="text-btn chart-help-toggle"
         :aria-expanded="chartHelp"

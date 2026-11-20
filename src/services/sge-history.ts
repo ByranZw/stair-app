@@ -61,7 +61,14 @@ function shanghaiDate(stamp: number): string {
   return new Date(stamp + 8 * 3600000).toISOString().slice(0, 10)
 }
 
-/** 截断now之后的供应方预填数据；夜盘日期使用实际接收日历而非可能属于次日的交易日标签。 */
+/** 将合法时钟换算到20:00起始的交易轴，避免午夜后时刻被排到夜盘之前。 */
+function sessionMinute(time: unknown): number {
+  if (typeof time !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) return -1
+  const minutes = Number(time.slice(0, 2)) * 60 + Number(time.slice(3))
+  return minutes < 20 * 60 ? minutes + 24 * 60 : minutes
+}
+
+/** 将休市、收盘时刻落到前一有效刻度，仍截断未发布预填值；夜盘保留真实日历日期。 */
 export function parseSgeMinute(
   raw: unknown,
   instrument: Instrument,
@@ -82,19 +89,27 @@ export function parseSgeMinute(
     data.times.length !== data.data.length
   )
     throw new Error('上金所分时行情格式发生变化')
-  const nowIndex = data.times.indexOf(data.now)
-  if (nowIndex < 0 || !/^\d{2}:\d{2}$/.test(data.now || ''))
-    throw new Error('上金所分时缺少有效截止时间')
+  const nowMinute = sessionMinute(data.now)
+  if (nowMinute < 0) throw new Error('上金所分时缺少有效截止时间')
   const fetchedAt = receivedAt.toISOString()
   const received = receivedAt.getTime()
   if (!Number.isFinite(received)) throw new Error('分时接收时间无效')
   const today = shanghaiDate(received)
   const label = data.delaystr?.match(/^(\d{4})年(\d{2})月(\d{2})日 (\d{2}:\d{2}):\d{2}$/)
   if (!label) throw new Error('上金所分时缺少有效行情日期')
-  const publishedIndex = data.times.indexOf(label[4])
-  if (publishedIndex < 0) throw new Error('上金所分时缺少有效发布时间')
+  const publishedMinute = sessionMinute(label[4])
+  if (publishedMinute < 0) throw new Error('上金所分时缺少有效发布时间')
   // 来源的now和发布时间非原子更新，取较早刻度，不能把尚未发布的预填值画出来。
-  const cutoffIndex = Math.min(nowIndex, publishedIndex)
+  const limit = Math.min(nowMinute, publishedMinute)
+  let cutoffIndex = -1
+  let previousMinute = -1
+  for (let i = 0; i < data.times.length; i++) {
+    const minute = sessionMinute(data.times[i])
+    if (minute < 0 || minute <= previousMinute) throw new Error('上金所分时刻度无效')
+    previousMinute = minute
+    if (minute <= limit) cutoffIndex = i
+  }
+  if (cutoffIndex < 0) throw new Error('上金所暂无可用分时行情')
   const cutoffTime = String(data.times[cutoffIndex])
   const tradingDate = `${label[1]}-${label[2]}-${label[3]}`
   const tradingStamp = Date.parse(`${tradingDate}T12:00:00+08:00`)
@@ -111,8 +126,6 @@ export function parseSgeMinute(
   const points: HistoryPoint[] = []
   for (let i = 0; i <= cutoffIndex; i++) {
     const time = data.times[i]
-    if (typeof time !== 'string' || !/^\d{2}:\d{2}$/.test(time))
-      throw new Error('上金所分时刻度无效')
     const date = `${time >= '20:00' ? startDay : time < '03:00' ? nextDay : tradingDate} ${time}`
     const value = data.data[i]
     if (value === '' || value === null || value === '-') continue
