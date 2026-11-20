@@ -1,0 +1,64 @@
+{
+  "Data": {
+    "LSJZList": [
+      {
+        "FSRQ": "2026-11-18",
+        "DWJZ": "3.0100",
+        "LJJZ": "3.0100",
+        "SDATE": null,
+        "ACTUALSYI": "",
+        "NAVTYPE": "1",
+        "JZZZL": "-0.56",
+        "SGZT": "开放申购",
+        "SHZT": "开放赎回",
+        "FHFCZ": "",
+        "FHFCZ10": "",
+        "FHFCBZ": "",
+        "DTYPE": null,
+        "FHSP": ""
+      },
+      {
+        "FSRQ": "2026-11-17",
+        "DWJZ": "3.0270",
+        "LJJZ": "3.0270",
+        "SDATE": null,
+        "ACTUALSYI": "",
+        "NAVTYPE": "1",
+        "JZZZL": "0.63",
+        "SGZT": "开放申购",
+        "SHZT": "开放赎回",
+        "FHFCZ": "",
+        "FHFCZ10": "",
+        "FHFCBZ": "",
+        "DTYPE": null,
+        "FHSP": ""
+      },
+      {
+        "FSRQ": "2026-11-16",
+        "DWJZ": "3.0080",
+        "LJJZ": "3.0080",
+        "SDATE": null,
+        "ACTUALSYI": "",
+        "NAVTYPE": "1",
+        "JZZZL": "0.94",
+        "SGZT": "开放申购",
+        "SHZT": "开放赎回",
+        "FHFCZ": "",
+        "FHFCZ10": "",
+        "FHFCBZ": "",
+        "DTYPE": null,
+        "FHSP": ""
+      }
+    ],
+    "FundType": "001",
+    "SYType": null,
+    "isNewType": false,
+    "Feature": null
+  },
+  "ErrCode": 0,
+  "ErrMsg": null,
+  "TotalCount": 3927,
+  "Expansion": null,
+  "PageSize": 3,
+  "PageIndex": 1
+}

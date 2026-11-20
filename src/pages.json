@@ -1,0 +1,77 @@
+{
+  "pages": [
+    {
+      "path": "pages/account/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/watchlist/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/plans/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/settings/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/detail/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    }
+  ],
+  "globalStyle": {
+    "backgroundColor": "#f5f7fb",
+    "navigationBarTextStyle": "black",
+    "app-plus": {
+      "softinputMode": "adjustResize"
+    }
+  },
+  "tabBar": {
+    "color": "#98a2b4",
+    "selectedColor": "#2858df",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/account/index",
+        "text": "账户",
+        "iconPath": "static/account.png",
+        "selectedIconPath": "static/account-active.png"
+      },
+      {
+        "pagePath": "pages/watchlist/index",
+        "text": "自选",
+        "iconPath": "static/watchlist.png",
+        "selectedIconPath": "static/watchlist-active.png"
+      },
+      {
+        "pagePath": "pages/plans/index",
+        "text": "计划",
+        "iconPath": "static/plans.png",
+        "selectedIconPath": "static/plans-active.png"
+      },
+      {
+        "pagePath": "pages/settings/index",
+        "text": "我的",
+        "iconPath": "static/settings.png",
+        "selectedIconPath": "static/settings-active.png"
+      }
+    ],
+    "height": "66px",
+    "fontSize": "11px",
+    "iconWidth": "21px",
+    "spacing": "5px"
+  }
+}
