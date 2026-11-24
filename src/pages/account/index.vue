@@ -7,7 +7,7 @@ import { usePageDialog } from '../../composables/useDialog'
 import { usePageSheetBack } from '../../composables/useSheetBack'
 usePageSheetBack()
 usePageDialog(true)
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { refreshAll, watchState } from '../../state/watchlist'
 import { bookState, selectedAccountId, projection } from '../../state/book'
 import { portfolio } from '../../state/portfolio'
@@ -18,9 +18,10 @@ import BookActions from '../../components/BookActions.vue'
 import AppToast from '../../components/AppToast.vue'
 import CapitalSummary from '../../components/CapitalSummary.vue'
 const actions = ref<InstanceType<typeof BookActions>>(),
-  hidden = ref(false),
+  hidden = ref(uni.getStorageSync('stair-hide-assets') === true),
   filter = ref('全部'),
   showReturns = ref(false)
+watch(hidden, (value) => uni.setStorageSync('stair-hide-assets', value), { flush: 'sync' })
 const pending = computed(() =>
   bookState.data.trades.filter(
     (trade) =>
@@ -61,6 +62,20 @@ const rows = computed(() =>
 /** 首页金额隐藏同时覆盖持仓列表，不只遮住资产大数字。 */
 function display(value: string | number | undefined, places = 2): string {
   return hidden.value ? '••••' : value === undefined ? '—' : formatMoney(value, places)
+}
+/** 收益按显示精度保留正负号；仅个人金额受隐私开关控制，行情百分比公开。 */
+function signed(value: InstanceType<typeof D> | undefined, percentage = false): string {
+  if (value === undefined) return '—'
+  if (!percentage && hidden.value) return '••••'
+  const rounded = value.toDecimalPlaces(2)
+  const amount = `${rounded.gt(0) ? '+' : ''}${formatMoney(rounded)}`
+  return percentage ? `${amount}%` : `¥${amount}`
+}
+/** 零值与缺失值保持中性，隐藏金额时也不泄露收益方向。 */
+function returnTone(value: InstanceType<typeof D> | undefined, privateAmount = false): string {
+  if (value === undefined || (privateAmount && hidden.value)) return ''
+  const rounded = value.toDecimalPlaces(2)
+  return rounded.gt(0) ? 'up' : rounded.lt(0) ? 'down' : ''
 }
 /** 已持仓标的不依赖自选身份，路由携带真实账户避免多账户混看。 */
 function detail(id: string, accountId: string): void {
@@ -268,20 +283,41 @@ function openWatchlist(): void {
             {{ row.item.code }} · {{ hidden ? '••••' : row.qty }}
             {{ instrumentUnit(row.item) }}</view
           >
-          <view class="position-values"
+          <view class="daily-values">
+            <view>
+              <view class="daily-label">
+                <text>{{ row.daily.estimated ? '日收益估算' : '日收益' }}</text>
+                <text class="daily-date">{{ row.daily.date?.slice(5, 10) || '—' }}</text>
+              </view>
+              <text class="daily-number num" :class="returnTone(row.daily.profit, true)">{{
+                signed(row.daily.profit)
+              }}</text>
+            </view>
+            <view class="daily-change">
+              <text class="position-label">日涨跌幅</text>
+              <text class="daily-number num" :class="returnTone(row.daily.changePct)">{{
+                signed(row.daily.changePct, true)
+              }}</text>
+            </view>
+          </view>
+          <view class="position-values secondary-values"
             ><view
               ><text class="position-number num">{{ display(row.value?.toString()) }}</text
               ><text class="position-label">持仓市值</text></view
             ><view
-              ><text class="position-number num" :class="row.pnl?.gte(0) ? 'up' : 'down'">{{
-                display(row.pnl?.toString())
+              ><text class="position-number num" :class="returnTone(row.pnl, true)">{{
+                signed(row.pnl)
               }}</text
               ><text class="position-label">持仓收益</text></view
             ><view
-              ><text class="position-number num" :class="row.pnl?.gte(0) ? 'up' : 'down'"
-                >{{ display(row.pnl?.div(row.totalCost).mul(100).toString())
-                }}{{ row.pnl && !hidden ? '%' : '' }}</text
-              ><text class="position-label">收益率</text></view
+              ><text class="position-number num" :class="returnTone(row.pnl, true)">{{
+                row.pnl === undefined || !new D(row.totalCost).gt(0)
+                  ? '—'
+                  : hidden
+                    ? '••••'
+                    : signed(row.pnl.div(row.totalCost).mul(100), true)
+              }}</text
+              ><text class="position-label">累计收益率</text></view
             ></view
           >
           <view class="position-bottom"
@@ -306,6 +342,47 @@ function openWatchlist(): void {
 }
 .holding-list .position {
   margin: 0;
+}
+.daily-values {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+.daily-label {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+.daily-date {
+  font-size: 10px;
+}
+.daily-number {
+  display: block;
+  margin-top: 5px;
+  font-size: 21px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.daily-change {
+  text-align: right;
+}
+.daily-change .position-label {
+  display: block;
+  font-size: 11px;
+  line-height: 16px;
+}
+.secondary-values {
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+.secondary-values .position-number {
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .onboarding .btn {

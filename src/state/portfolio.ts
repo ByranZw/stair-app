@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import { bookState, projection, selectedAccountId } from './book'
 import { watchState } from './watchlist'
 import { D } from '../domain/money'
+import { positionReturns } from './daily-returns'
+import { positionKey } from '../domain/book'
 /** 首页汇总按账户筛选；没有可信价格的资产单列，不用成本冒充市值。 */
 export const portfolio = computed(() => {
   const accounts = bookState.data.accounts.filter(
@@ -16,7 +18,14 @@ export const portfolio = computed(() => {
       const price = cached ? quoteCnyValue(cached.quote) : undefined
       const value = price === undefined ? undefined : new D(price).mul(position.qty)
       const pnl = value?.minus(position.totalCost)
-      return { ...position, item, value, pnl, stale: !!watchState.errors[item.id] }
+      return {
+        ...position,
+        item,
+        value,
+        pnl,
+        daily: positionReturns.value[positionKey(position.accountId, item.id)],
+        stale: !!watchState.errors[item.id],
+      }
     })
   const cash = accounts.reduce((sum, a) => sum.plus(projection.value.cash[a.id]), new D(0))
   const available = accounts.reduce(

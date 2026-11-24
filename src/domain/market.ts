@@ -17,6 +17,7 @@ export interface Quote {
   fxSource?: string
   delayed?: boolean
   previous?: string
+  changePercent?: string
   date: string
   source: string
   fetchedAt: string

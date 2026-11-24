@@ -134,7 +134,12 @@ export function parseFund(
   const points = rows
     .map((item) => {
       const row = record(item)
-      return { date: marketDate(row.FSRQ), value: price(row.DWJZ) }
+      const change = String(row.JZZZL ?? '')
+      return {
+        date: marketDate(row.FSRQ),
+        value: price(row.DWJZ),
+        changePercent: /^[+-]?\d+(?:\.\d+)?$/.test(change) ? change : undefined,
+      }
     })
     .sort((a, b) => a.date.localeCompare(b.date))
   const latest = points[points.length - 1],
@@ -144,6 +149,7 @@ export function parseFund(
       instrumentId: instrument.id,
       value: latest.value,
       previous: points[points.length - 2]?.value,
+      changePercent: latest.changePercent,
       date: latest.date,
       source: '东方财富 · 正式单位净值',
       fetchedAt,

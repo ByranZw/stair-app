@@ -10,6 +10,8 @@ const dialog = usePageDialog(true)
 import { computed, ref, watch } from 'vue'
 import { onShow, onHide } from '@dcloudio/uni-app'
 import { watchState, addInstrument, removeInstrument, refreshAll } from '../../state/watchlist'
+import { watchReturns } from '../../state/daily-returns'
+import { D, formatMoney } from '../../domain/money'
 import { searchInstruments } from '../../services/market'
 import type { Instrument } from '../../domain/market'
 import AppIcon from '../../components/AppIcon.vue'
@@ -27,7 +29,8 @@ const searching = ref(false),
   error = ref(''),
   filter = ref('全部'),
   pressed = ref(''),
-  removing = ref(false)
+  removing = ref(false),
+  hidden = ref(uni.getStorageSync('stair-hide-assets') === true)
 const visible = computed(() =>
   watchState.items.filter(
     (item) =>
@@ -57,6 +60,7 @@ const chartVisible = ref(true)
 // Tab保留页面实例；隐藏时停止Canvas测量，避免用详情页上下文查询迷你图。
 onShow(() => {
   chartVisible.value = true
+  hidden.value = uni.getStorageSync('stair-hide-assets') === true
 })
 onHide(() => {
   chartVisible.value = false
@@ -123,10 +127,19 @@ async function remove(item: Instrument): Promise<void> {
     suppressClickUntil = Date.now() + 350
   }
 }
-/** 来源前值仅用于行情涨跌显示，不作为账户收益。 */
-function change(id: string): number | undefined {
-  const quote = watchState.cache[id]?.quote
-  return quote?.previous ? (Number(quote.value) / Number(quote.previous) - 1) * 100 : undefined
+/** 直接呈现领域层的报价日收益；金额隐藏不影响公开行情百分比。 */
+function signed(value: InstanceType<typeof D> | undefined, percentage = false): string {
+  if (value === undefined) return '—'
+  if (!percentage && hidden.value) return '••••'
+  const rounded = value.toDecimalPlaces(2)
+  const amount = `${rounded.gt(0) ? '+' : ''}${formatMoney(rounded)}`
+  return percentage ? `${amount}%` : `¥${amount}`
+}
+/** 零值与缺失值不着涨跌色，隐私金额不暴露盈亏方向。 */
+function returnTone(value: InstanceType<typeof D> | undefined, privateAmount = false): string {
+  if (value === undefined || (privateAmount && hidden.value)) return ''
+  const rounded = value.toDecimalPlaces(2)
+  return rounded.gt(0) ? 'up' : rounded.lt(0) ? 'down' : ''
 }
 /** 价格保留来源的小数精度，未取得报价时不以零代替。 */
 function quote(id: string): string {
@@ -150,8 +163,9 @@ function quote(id: string): string {
         {{ label }}
       </button></view
     >
+    <view class="watch-scope muted">日收益为全部账户合计</view>
     <view class="watch-head"
-      ><text>名称 / 代码</text><text>最新价 / 净值</text><text>涨跌幅</text></view
+      ><text>名称 / 代码</text><text>最新价 / 净值</text><text>日涨跌幅</text></view
     >
     <view class="watch-box">
       <view v-if="!visible.length" class="empty"
@@ -195,14 +209,9 @@ function quote(id: string): string {
                 : watchState.cache[item.id]?.quote.date.slice(5, 16) || '等待行情'
             }}</view></view
           ><view
-            ><text
-              class="num"
-              :class="change(item.id) !== undefined ? (change(item.id)! >= 0 ? 'up' : 'down') : ''"
-              >{{
-                change(item.id) === undefined
-                  ? '—'
-                  : `${change(item.id)! >= 0 ? '+' : ''}${change(item.id)!.toFixed(2)}%`
-              }}</text
+            ><text class="num" :class="returnTone(watchReturns[item.id]?.changePct)">{{
+              signed(watchReturns[item.id]?.changePct, true)
+            }}</text
             ><view class="spark"
               ><HistoryChart
                 v-if="watchState.cache[item.id]?.history.points.length"
@@ -210,6 +219,20 @@ function quote(id: string): string {
                 :active="chartVisible"
                 :points="watchState.cache[item.id].history.points.slice(-20)" /></view
           ></view>
+          <view class="watch-daily">
+            <view class="watch-daily-label">
+              <text>{{ watchReturns[item.id]?.estimated ? '日收益估算' : '日收益' }}</text>
+              <text>{{ watchReturns[item.id]?.date?.slice(5, 10) || '—' }}</text>
+            </view>
+            <text
+              v-if="watchReturns[item.id]?.held || watchReturns[item.id]?.profit !== undefined"
+              class="num"
+              :class="returnTone(watchReturns[item.id]?.profit, true)"
+              >{{ signed(watchReturns[item.id]?.profit) }}</text
+            >
+            <text v-else-if="watchReturns[item.id]" class="muted">未持有</text>
+            <text v-else class="muted">—</text>
+          </view>
         </button>
         <view v-if="watchState.errors[item.id]" class="error" style="padding: 0 12px 12px"
           >{{ watchState.errors[item.id]
@@ -264,3 +287,47 @@ function quote(id: string): string {
     <PageOverlays />
   </view>
 </template>
+
+<style scoped>
+.watch-scope {
+  padding: 0 12px 10px;
+  font-size: 11px;
+}
+.watch-row {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.9fr) minmax(0, 0.8fr);
+  column-gap: 8px;
+  row-gap: 12px;
+  padding-top: 16px;
+  padding-bottom: 13px;
+}
+.watch-head {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.9fr) minmax(0, 0.8fr);
+  column-gap: 8px;
+}
+.watch-row > view {
+  min-width: 0;
+}
+.watch-row .asset-name {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.watch-row .num {
+  overflow-wrap: anywhere;
+}
+.watch-row .watch-daily {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  font-size: 12px;
+}
+.watch-daily-label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 10px;
+}
+</style>
