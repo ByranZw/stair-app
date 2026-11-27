@@ -149,14 +149,8 @@ test('场外申请仅预留，正式确认原子替换，撤销释放，不会�
   b.trades.find((t) => t.id === 't2')!.status = 'cancelled'
   assert.equal(projectBook(b).availableCash.a, '48998.00')
 })
-test('待确认赎回不能与后续卖出重复占用持仓；计划预算含手续费与预留', () => {
+test('待确认赎回不能与后续卖出重复占用持仓', () => {
   let b = fixture()
-  b.plans = [{ ...plan(), budget: '1000' }]
-  assert.throws(
-    () => recordTrade(b, trade('t1', '2026-01-02', 'buy', '100', '10', '1', { planId: 'p' })),
-    /超过本轮计划预算/,
-  )
-  b = fixture()
   b.instruments = [{ id: 'FUND:110022', code: '110022', name: '测试基金', type: 'FUND' }]
   b = recordTrade(
     b,

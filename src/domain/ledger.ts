@@ -261,7 +261,7 @@ export function validatePlan(plan: Plan): void {
     throw new Error('计划参数版本无效')
 }
 
-/** 持仓、现金及历史盈利从基准重放；图表可指定截止日，不能提前计入尚未到账的权益。 */
+/** 按已录事实重放持仓、现金和盈利；现金可为负，不以验资或预算阻拦补记。图表不提前计入权益。 */
 export function projectBook(book: Book, throughDate?: string): Projection {
   validateBook(book)
   const result: Projection = { positions: {}, cash: {}, availableCash: {}, trades: {}, plans: {} }
@@ -342,10 +342,6 @@ export function projectBook(book: Book, throughDate?: string): Projection {
     if (event.flow) {
       const f = event.flow
       const value = new D(result.cash[f.accountId])[f.side === 'in' ? 'plus' : 'minus'](f.amount)
-      if (value.lt(0))
-        throw new Error(
-          `转出超过当时可用现金：${f.date} 转出 ¥${f.amount}，可用 ¥${result.cash[f.accountId]}`,
-        )
       result.cash[f.accountId] = money(value)
       continue
     }
@@ -433,13 +429,8 @@ export function projectBook(book: Book, throughDate?: string): Projection {
     const plan = trade.planId ? result.plans[trade.planId] : undefined
     if (plan?.ended) throw new Error('本轮计划已结束，请新建下一轮再关联后续成交')
     if (trade.side === 'buy') {
-      const net = gross.plus(fee),
-        cash = new D(result.cash[trade.accountId]).minus(net)
-      if (cash.lt(0))
-        throw new Error(
-          `买入超过成交当时现金：${trade.date} ${book.instruments.find((i) => i.id === trade.instrumentId)!.name}，需 ¥${money(net)}，可用 ¥${result.cash[trade.accountId]}`,
-        )
-      result.cash[trade.accountId] = money(cash)
+      const net = gross.plus(fee)
+      result.cash[trade.accountId] = money(new D(result.cash[trade.accountId]).minus(net))
       position.qty = new D(position.qty).plus(qty).toString()
       position.totalCost = new D(position.totalCost).plus(net).toString()
       position.unitCost = new D(position.totalCost).div(position.qty).toString()
@@ -500,8 +491,6 @@ export function projectBook(book: Book, throughDate?: string): Projection {
       result.availableCash[trade.accountId] = money(
         new D(result.availableCash[trade.accountId]).minus(reserve),
       )
-      if (new D(result.availableCash[trade.accountId]).lt(0))
-        throw new Error('待确认买入超过账户可用现金')
       if (plan) plan.reserved = money(new D(plan.reserved).plus(reserve))
     } else {
       const key = positionKey(trade.accountId, trade.instrumentId)
@@ -513,8 +502,6 @@ export function projectBook(book: Book, throughDate?: string): Projection {
   const activeKeys = new Set<string>()
   for (const plan of book.plans) {
     const derived = result.plans[plan.id]
-    if (new D(derived.used).plus(derived.reserved).gt(plan.budget))
-      throw new Error('本次投入或预留超过本轮计划预算')
     if (!derived.ended) {
       const key = positionKey(plan.accountId, plan.instrumentId)
       if (activeKeys.has(key)) throw new Error('同账户标的已有进行中计划，请先结束本轮')

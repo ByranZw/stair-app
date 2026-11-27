@@ -1,6 +1,6 @@
 {
   "name": "stair-app",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "private": true,
   "scripts": {
     "dev:h5": "uni --host 127.0.0.1 --port 5178",

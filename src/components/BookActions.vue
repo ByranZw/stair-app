@@ -816,6 +816,7 @@ defineExpose({ open, showRecord, removeRecord })
         >
       </view>
 
+      <view class="tip">现金按已录流水计算，可为负，不代表银行实际余额，也不限制补记。</view>
       <view v-if="!funding.plans.length" class="empty"
         >暂无投资计划，可以先为这个账户分配预算。</view
       >
@@ -1072,6 +1073,7 @@ defineExpose({ open, showRecord, removeRecord })
           <view class="tip">导入持仓不扣现金。</view></template
         >
         <template v-if="mode === 'trade'">
+          <view class="tip">这里只记录交易，不校验现金或计划预算是否足够。</view>
           <view class="chips"
             ><button
               :disabled="!!confirmationId"

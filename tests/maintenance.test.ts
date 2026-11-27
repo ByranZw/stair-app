@@ -99,7 +99,7 @@ test('更正基准日期不能覆盖已记录的更早交易', () => {
   )
 })
 
-test('资金更正保留序号，删除转入或改转出按历史重算且失败不污染原数据', () => {
+test('资金更正保留序号，删除转入或改转出后允许负现金且不污染原数据', () => {
   const book = fixture()
   const input = { accountId: 'b', date: '2026-01-03', amount: '200', side: 'out' as const }
   const next = maintainCashFlow(book, 'c', input, book.cashFlows[0])
@@ -108,14 +108,10 @@ test('资金更正保留序号，删除转入或改转出按历史重算且失�
   assert.equal(projectBook(maintainCashFlow(book, 'c', null)).cash.a, '1000.00')
   book.trades = [trade('buy', '140', '10')]
   const original = JSON.stringify(book)
-  assert.throws(
-    () => maintainCashFlow(book, 'c', null),
-    /2026-01-04 沪深300，需 ¥1400.00，可用 ¥1000.00/,
-  )
-  assert.throws(
-    () => maintainCashFlow(book, 'c', { ...input, accountId: 'a', amount: '2000' }),
-    /2026-01-03 转出/,
-  )
+  assert.equal(projectBook(maintainCashFlow(book, 'c', null)).cash.a, '-400.00')
+  const changed = maintainCashFlow(book, 'c', { ...input, accountId: 'a', amount: '2000' })
+  assert.equal(changed.cashFlows[0].sequence, 1)
+  assert.equal(projectBook(changed).cash.a, '-2400.00')
   assert.equal(JSON.stringify(book), original)
 })
 

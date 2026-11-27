@@ -53,13 +53,27 @@ test('更正初始现金75000至80000后现金增加5000，持仓及真实资金
   assert.equal(JSON.stringify(book), before)
 })
 
-test('更正后日期越过成交、历史中途现金不足、重名或未知账户都拒绝且原书不变', () => {
+test('更正现金基准允许历史中途现金为负，不改变已记录份额与盈利', () => {
+  const book = accountBook()
+  const before = JSON.stringify(book)
+  const next = correctAccount(book, 'a', {
+    name: '原账户',
+    openingCash: '10000',
+    date: '2026-01-01',
+  })
+  assert.equal(projectBook(next, '2026-01-02').cash.a, '-10002.00')
+  assert.equal(projectBook(next).cash.a, '2496.00')
+  assert.deepEqual(projectBook(next).positions, projectBook(book).positions)
+  assert.deepEqual(next.cashFlows, book.cashFlows)
+  assert.equal(JSON.stringify(book), before)
+})
+
+test('更正后日期越过成交、重名或未知账户都拒绝且原书不变', () => {
   const book = accountBook()
   book.accounts.push({ id: 'b', name: '另一账户', openingCash: '1000', date: '2026-01-01' })
   const before = JSON.stringify(book)
   for (const [id, input] of [
     ['a', { name: '原账户', openingCash: '75000', date: '2026-01-03' }],
-    ['a', { name: '原账户', openingCash: '10000', date: '2026-01-01' }],
     ['a', { name: '另一账户', openingCash: '75000', date: '2026-01-01' }],
     ['missing', { name: '新名称', openingCash: '75000', date: '2026-01-01' }],
   ] as const) {

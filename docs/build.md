@@ -53,7 +53,7 @@ python3 scripts/build-android.py \
   --pack-tools /path/to/HBuilderX/plugins/app-safe-pack \
   --signing-config /private/path/signing.local.json \
   --java /path/to/java17/bin/java \
-  --output dist/release/apk/stair-0.1.12-arm64.apk
+  --output dist/release/apk/stair-0.1.13-arm64.apk
 ```
 
 签名 JSON 放在仓库外，包含 `storeFile`、`alias`、`storePassword`、`keyPassword`。其中 `storeFile` 指向本机密钥库，密码由脚本通过环境变量传给签名工具。
@@ -71,6 +71,6 @@ python3 scripts/build-android.py \
 
 使用同一包名和签名覆盖安装可保留现有应用数据。更换签名通常需要卸载，操作前先[导出账本](backup.md)。
 
-新包需在安卓设备核对行情直连、SQLite 记账、文件备份恢复及图表交互。H5 检查和资源编译不能代替设备验证；最新 0.1.12 包已完成构建与签名校验，尚未单独完成本轮设备安装验证。
+新包需在安卓设备核对行情直连、SQLite 记账、文件备份恢复及图表交互。H5 检查和资源编译不能代替设备验证；最新 0.1.13 包已完成构建与签名校验，尚未单独完成本轮设备安装验证。
 
 iOS 尚未完成打包和适配，当前脚本仅构建安卓包。

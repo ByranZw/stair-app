@@ -46,7 +46,7 @@ export function maintainOpening(
   return next
 }
 
-/** 资金流水更正保留原序号；历史现金不足时整次操作不落账。 */
+/** 资金流水更正保留原序号；按事实重放，现金缺口不阻止更正或删除。 */
 export function maintainCashFlow(
   book: Book,
   id: string,
