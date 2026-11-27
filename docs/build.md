@@ -53,7 +53,7 @@ python3 scripts/build-android.py \
   --pack-tools /path/to/HBuilderX/plugins/app-safe-pack \
   --signing-config /private/path/signing.local.json \
   --java /path/to/java17/bin/java \
-  --output dist/release/apk/stair-0.1.13-arm64.apk
+  --output dist/release/apk/stair-0.1.14-arm64.apk
 ```
 
 签名 JSON 放在仓库外，包含 `storeFile`、`alias`、`storePassword`、`keyPassword`。其中 `storeFile` 指向本机密钥库，密码由脚本通过环境变量传给签名工具。
@@ -71,6 +71,15 @@ python3 scripts/build-android.py \
 
 使用同一包名和签名覆盖安装可保留现有应用数据。更换签名通常需要卸载，操作前先[导出账本](backup.md)。
 
-新包需在安卓设备核对行情直连、SQLite 记账、文件备份恢复及图表交互。H5 检查和资源编译不能代替设备验证；最新 0.1.13 包已完成构建与签名校验，尚未单独完成本轮设备安装验证。
+新包需在安卓设备核对行情直连、SQLite 记账、文件备份恢复及图表交互。H5 检查和资源编译不能代替设备验证；构建日志与模拟器检查不代替实体设备的厂商安装权限验证。
+
+## GitHub应用内更新发布契约
+
+- 固定仓库 `ByranZw/stair-app`，正式标签 `v0.1.14` 等三段整数，APK命名 `stair-0.1.14-arm64.apk`，版本码必须递增。
+- 上传签名APK、SHA256SUMS和 `update.json` 后设为latest，检查GitHub资产的 `digest` 为实际SHA-256；清单复用GitHubRelease字段，必须包含正式标签、固定Release链接、APK准确大小/URL及 `sha256:摘要`。App优先从固定latest附件地址读取清单，仅404时回退公共API；无需更新服务器或令牌。
+- 工程只新增 `REQUEST_INSTALL_PACKAGES` 用户授权权限，仍排除特权 `INSTALL_PACKAGES`、电话、媒体和全盘存储权限；重建脚本将申请权限加入原生Manifest，不只修改资源配置。
+- 下载保存在应用私有更新目录，新下载清理旧残留；取消/超时/校验失败删除临时文件。源文件、签名私钥、APK、工具链均不进入源码提交。
+- 系统安装成功不由App假定；下一次启动以原生实际版本为准。实体设备需验证来源授权、取消、覆盖安装及账本保留；旧版第一次仍需手动安装带更新功能的版本。
+- 重建脚本会按当前版本的CHANGELOG段落生成同名 `.update.json`，发布时将其作为 `update.json` 附件上传。建议先创建草稿、上传全部附件并核对摘要，再发布为latest，避免检查到未完整上传的版本。
 
 iOS 尚未完成打包和适配，当前脚本仅构建安卓包。

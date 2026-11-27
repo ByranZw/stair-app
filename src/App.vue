@@ -3,9 +3,11 @@ import { onShow, onHide } from '@dcloudio/uni-app'
 import { appVisible } from './state/app-visibility'
 import { refreshAll } from './state/watchlist'
 import { initializeBook } from './state/book'
+import { appUpdater } from './state/app-update'
 /** 启动与返回前台统一刷新；同标的请求合并，来源失败不清空缓存。 */
 onShow(() => {
   appVisible.value = true
+  void appUpdater.check()
   void initializeBook()
     .then(refreshAll)
     .catch(() => undefined)

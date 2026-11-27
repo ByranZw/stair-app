@@ -49,6 +49,17 @@ def configure_native(directory, source, manifest):
     for item in list(root):
         if item.tag == 'uses-permission' and item.get(ANDROID + 'name') in excluded:
             root.remove(item)
+    requested = {
+        ET.fromstring(item.replace('<uses-permission', '<uses-permission xmlns:android="' +
+            ANDROID[1:-1] + '"', 1)).get(ANDROID + 'name')
+        for item in android['permissions']
+    }
+    if requested & excluded:
+        raise ValueError('工程权限同时出现在申请和排除列表')
+    present = {item.get(ANDROID + 'name') for item in root.findall('uses-permission')}
+    for name in sorted(requested - present):
+        item = ET.SubElement(root, 'uses-permission')
+        item.set(ANDROID + 'name', name)
     application = root.find('application')
     for name, setting in [('DCLOUD_READ_PHONE_STATE', 'permissionPhoneState'),
                           ('DCLOUD_WRITE_EXTERNAL_STORAGE', 'permissionExternalStorage')]:
@@ -89,6 +100,11 @@ def main():
     args = parser.parse_args()
     source = Path(__file__).resolve().parents[1]
     manifest = json.loads((source / 'src/manifest.json').read_text(encoding='utf-8'))
+    notes = (source / 'CHANGELOG.md').read_text(encoding='utf-8')
+    heading = '## ' + manifest['versionName'] + '\n'
+    if heading not in notes:
+        raise ValueError('版本记录中缺少当前版本，不能生成更新清单')
+    notes = notes.split(heading, 1)[1].split('\n## ', 1)[0].strip()
     app_id = manifest['appid']
     if not re.fullmatch(r'__UNI__[A-Za-z0-9]+', app_id):
         raise ValueError('工程AppID格式无效')
@@ -148,6 +164,18 @@ def main():
                   'signatureVerified': True, 'apktoolVersion': '3.0.3'}
         args.output.with_suffix('.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
         args.output.with_suffix('.signature.txt').write_text(verification, encoding='utf-8')
+        tag = 'v' + manifest['versionName']
+        asset_name = 'stair-' + manifest['versionName'] + '-arm64.apk'
+        release_home = 'https://github.com/ByranZw/stair-app/releases'
+        update = {
+            'tag_name': tag, 'draft': False, 'prerelease': False,
+            'html_url': release_home + '/tag/' + tag, 'body': notes,
+            'assets': [{'name': asset_name, 'state': 'uploaded', 'size': report['sizeBytes'],
+                        'browser_download_url': release_home + '/download/' + tag + '/' + asset_name,
+                        'digest': 'sha256:' + report['sha256']}],
+        }
+        args.output.with_suffix('.update.json').write_text(
+            json.dumps(update, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         print('本地APK重建及签名校验通过：' + str(args.output))
 
 

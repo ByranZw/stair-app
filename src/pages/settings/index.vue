@@ -16,6 +16,10 @@ import BackupPanel from '../../components/BackupPanel.vue'
 import { bookState } from '../../state/book'
 const maintenance = ref<InstanceType<typeof DataMaintenance>>()
 const actions = ref<InstanceType<typeof BookActions>>()
+/** 更新独立页面保留当前Tab上下文，不复用交易抽屉。 */
+function openUpdate(): void {
+  uni.navigateTo({ url: '/pages/update/index' })
+}
 const sheet = ref(false),
   section = ref(''),
   busy = ref(false),
@@ -64,10 +68,12 @@ async function checkGold() {
       ><button class="setting-row" @click="open('数据备份')">
         <text>数据备份与恢复</text><text class="muted">本地文件 ›</text></button
       ><button class="setting-row" @click="open('行情与数据来源')">
-        <text>行情与数据来源</text><text class="muted">免费来源 ›</text>
+        <text>行情与数据来源</text><text class="muted">免费来源 ›</text></button
+      ><button class="setting-row" @click="openUpdate">
+        <text>检查更新</text><text class="muted">GitHub 正式版 ›</text>
       </button></view
     >
-    <view class="version-note">拾阶 STAIR · 0.1.13</view>
+    <view class="version-note">拾阶 STAIR · 0.1.14</view>
     <BookActions ref="actions" tab-page /><DataMaintenance ref="maintenance" tab-page /><AppToast />
     <BottomSheet v-model="sheet" :title="section" tab-page :contained="section === '数据备份'">
       <template v-if="section === '默认投资策略'"
